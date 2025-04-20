@@ -23,5 +23,7 @@ run-zero:
 run-invalid:
 	./InvalidMemory
 
+.PHONY: all clean run-stack run-zero run-invalid
+
 clean:
 	rm -f StackOverflow DivisionByZero InvalidMemory
