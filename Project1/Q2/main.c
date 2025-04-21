@@ -2,10 +2,25 @@
 #include <stdlib.h>
 #include <math.h>
 #include <complex.h>
+#include <string.h>
+
+
+void print_help(const char *prog_name) {
+    fprintf(stderr, "Usage: %s <real part> <imaginary part> [N]\n", prog_name);
+    fprintf(stderr, "Checks if the complex number c = a + bi belongs to the Mandelbrot set.\n");
+    fprintf(stderr, "Optional: N is the maximum number of iterations (default: 1000).\n");
+}
+
+
 
 int main(int argc, char *argv[]) {
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        print_help(argv[0]);
+        return 0;
+    }
+
     if (argc < 3) {
-        printf("Usage: %s <real part> <imaginary part> [N]\n", argv[0]);
+        print_help(argv[0]);
         return 1;
     }
 
@@ -19,7 +34,6 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < N; i++) {
         z = z*z + c;
-
         if (cabs(z) > M) {
             printf("The sequence diverges. The number is NOT in the Mandelbrot set.\n");
             return 0;
