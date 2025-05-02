@@ -35,11 +35,11 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < N; i++) {
         z = z*z + c;
         if (cabs(z) > M) {
-            printf("The sequence diverges. The number is NOT in the Mandelbrot set.\n");
+            printf("c = %.4f + %.4fi is NOT in the Mandelbrot set\n", real, imag);
             return 0;
         }
     }
 
-    printf("The sequence does NOT diverge. The number is in the Mandelbrot set.\n");
+    printf("c = %.4f + %.4fi is in the Mandelbrot set\n", real, imag);
     return 0;
 }

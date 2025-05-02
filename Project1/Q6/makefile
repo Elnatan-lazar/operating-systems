@@ -11,3 +11,4 @@ Sender: Sender.c
 
 clean:
 	rm -f Receiver Sender
+

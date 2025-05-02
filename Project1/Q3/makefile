@@ -24,5 +24,6 @@ $(TARGET): main.c mandelbrot.h
 run: all
 	LD_LIBRARY_PATH=. ./$(TARGET)
 
+
 clean:
 	rm -f *.o *.so $(TARGET)
