@@ -1,13 +1,13 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
 
-all: receiver sender
+all: Receiver Sender
 
-receiver: Receiver.c
+Receiver: Receiver.c
 	$(CC) $(CFLAGS) -o Receiver Receiver.c
 
-sender: Sender.c
-	$(CC) $(CFLAGS) -oSsender Sender.c
+Sender: Sender.c
+	$(CC) $(CFLAGS) -o Sender Sender.c
 
 clean:
 	rm -f Receiver Sender
