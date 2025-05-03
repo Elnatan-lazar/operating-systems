@@ -1,7 +1,7 @@
 # Makefile
 
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall
 
 all: StackOverflow DivisionByZero InvalidMemory
 
