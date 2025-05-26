@@ -1,0 +1,197 @@
+/*
+ * supplier_molecule.cpp
+ *
+ * A server that manages a warehouse of atoms and can deliver molecules.
+ * Supports both TCP (adding atoms) and UDP (delivering molecules).
+ *
+ * Usage:
+ *   ./supplier_molecule <tcp_port> <udp_port>
+ *
+ * Author: Elnatan Lazar
+ */
+
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <cstring>
+#include <cstdlib>
+#include <unordered_map>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+
+#define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
+
+std::unordered_map<std::string, unsigned long long> atom_inventory;
+const unsigned long long MAX_ATOMS = 1000000000000000000ULL; // 10^18
+
+/**
+ * Prints the current inventory of the warehouse.
+ */
+void print_inventory() {
+    std::cout << "Inventory:" << std::endl;
+    for (const auto &pair : atom_inventory) {
+        std::cout << pair.first << ": " << pair.second << std::endl;
+    }
+}
+
+/**
+ * Processes TCP commands to add atoms.
+ * Format: ADD <ATOM_TYPE> <NUMBER>
+ */
+void process_tcp_command(const std::string &cmd) {
+    std::istringstream iss(cmd);
+    std::string action, atom;
+    unsigned long long number;
+
+    if (iss >> action >> atom >> number && action == "ADD") {
+        if (atom_inventory[atom] + number <= MAX_ATOMS) {
+            atom_inventory[atom] += number;
+        } else {
+            atom_inventory[atom] = MAX_ATOMS;
+        }
+        print_inventory();
+    } else {
+        std::cerr << "Invalid TCP command!" << std::endl;
+    }
+}
+
+/**
+ * Processes UDP commands to deliver molecules.
+ * Format: DELIVER <MOLECULE> <NUMBER>
+ * Returns true if the delivery was successful.
+ */
+bool process_udp_command(const std::string &cmd) {
+    std::istringstream iss(cmd);
+    std::string action, molecule;
+    unsigned long long number;
+
+    if (iss >> action >> molecule >> number && action == "DELIVER") {
+        unsigned long long needed_C=0, needed_O=0, needed_H=0;
+
+        if (molecule == "WATER") {
+            needed_H = 2*number;
+            needed_O = 1*number;
+        } else if (molecule == "CARBON" || molecule == "DIOXIDE") {
+            // Accept "CARBON DIOXIDE" as two words
+            std::string second_word;
+            if (molecule == "CARBON" && iss >> second_word && second_word == "DIOXIDE") {
+                needed_C = 1*number;
+                needed_O = 2*number;
+            } else {
+                std::cerr << "Invalid molecule!" << std::endl;
+                return false;
+            }
+        } else if (molecule == "ALCOHOL") {
+            needed_C = 2*number;
+            needed_H = 6*number;
+            needed_O = 1*number;
+        } else if (molecule == "GLUCOSE") {
+            needed_C = 6*number;
+            needed_H = 12*number;
+            needed_O = 6*number;
+        } else {
+            std::cerr << "Invalid molecule!" << std::endl;
+            return false;
+        }
+
+        if (atom_inventory["CARBON"] >= needed_C &&
+            atom_inventory["OXYGEN"] >= needed_O &&
+            atom_inventory["HYDROGEN"] >= needed_H) {
+            atom_inventory["CARBON"] -= needed_C;
+            atom_inventory["OXYGEN"] -= needed_O;
+            atom_inventory["HYDROGEN"] -= needed_H;
+            print_inventory();
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    std::cerr << "Invalid UDP command!" << std::endl;
+    return false;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << " <tcp_port> <udp_port>" << std::endl;
+        return 1;
+    }
+    int tcp_port = std::stoi(argv[1]);
+    int udp_port = std::stoi(argv[2]);
+
+    // TCP socket setup
+    int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    sockaddr_in tcp_addr{};
+    tcp_addr.sin_family = AF_INET;
+    tcp_addr.sin_addr.s_addr = INADDR_ANY;
+    tcp_addr.sin_port = htons(tcp_port);
+    bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
+    listen(tcp_sock, MAX_CLIENTS);
+
+    // UDP socket setup
+    int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in udp_addr{};
+    udp_addr.sin_family = AF_INET;
+    udp_addr.sin_addr.s_addr = INADDR_ANY;
+    udp_addr.sin_port = htons(udp_port);
+    bind(udp_sock, (sockaddr*)&udp_addr, sizeof(udp_addr));
+
+    // select() setup
+    fd_set master_set, read_fds;
+    FD_ZERO(&master_set);
+    FD_SET(tcp_sock, &master_set);
+    FD_SET(udp_sock, &master_set);
+    int fdmax = std::max(tcp_sock, udp_sock);
+
+    std::cout << "Server started! TCP port: " << tcp_port << ", UDP port: " << udp_port << std::endl;
+
+    while (true) {
+        read_fds = master_set;
+        if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
+            perror("select");
+            exit(1);
+        }
+
+        for (int i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) {
+                if (i == tcp_sock) {
+                    sockaddr_in cli_addr{};
+                    socklen_t cli_len = sizeof(cli_addr);
+                    int new_fd = accept(tcp_sock, (sockaddr*)&cli_addr, &cli_len);
+                    if (new_fd != -1) {
+                        FD_SET(new_fd, &master_set);
+                        if (new_fd > fdmax) fdmax = new_fd;
+                        std::cout << "New TCP client connected." << std::endl;
+                    }
+                } else if (i == udp_sock) {
+                    char buf[BUFFER_SIZE];
+                    sockaddr_in client_addr{};
+                    socklen_t len = sizeof(client_addr);
+                    int n = recvfrom(udp_sock, buf, sizeof(buf)-1, 0, (sockaddr*)&client_addr, &len);
+                    buf[n] = '\0';
+
+                    std::string response = process_udp_command(std::string(buf)) ? "DELIVERED" : "FAILED";
+                    sendto(udp_sock, response.c_str(), response.size(), 0, (sockaddr*)&client_addr, len);
+                } else {
+                    char buf[BUFFER_SIZE];
+                    int nbytes = recv(i, buf, sizeof(buf)-1, 0);
+                    if (nbytes <= 0) {
+                        std::cout << "TCP client disconnected." << std::endl;
+                        close(i);
+                        FD_CLR(i, &master_set);
+                    } else {
+                        buf[nbytes] = '\0';
+                        process_tcp_command(std::string(buf));
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}

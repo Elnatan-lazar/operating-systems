@@ -35,6 +35,7 @@ void print_inventory() {
     std::cout << "Inventory:" << std::endl;
     for (const auto &pair : atom_inventory) {
         std::cout << pair.first << ": " << pair.second << std::endl;
+        
     }
 }
 
