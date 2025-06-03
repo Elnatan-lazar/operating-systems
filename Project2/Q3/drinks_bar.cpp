@@ -1,14 +1,16 @@
 /*
- * bar_drinks.cpp
+ * drinks_bar.cpp
  *
- * A TCP/UDP server to manage a warehouse of atoms and check drink/molecule availability.
+ * A TCP/UDP server to manage a warehouse of atoms and molecules.
+ * Also handles console commands to check available drinks.
  *
- * TCP: ADD CARBON/OXYGEN/HYDROGEN <number> (updates inventory).
- * UDP: DELIVER ... (just checks how many can be created, no reduction).
- * Keyboard: GEN ... (checks how many drinks can be created, no reduction).
+ * TCP: ADD CARBON/OXYGEN/HYDROGEN/WATER/ALCOHOL/GLUCOSE/CARBON DIOXIDE <number>
+ *      (updates inventory directly).
+ * UDP: DELIVER <MOLECULE> <number> (removes from molecule inventory if enough).
+ * Console: GEN ... (checks how many drinks can be created from existing molecules).
  *
  * Usage:
- *   ./bar_drinks <tcp_port> <udp_port>
+ *   ./drinks_bar <tcp_port> <udp_port>
  */
 
 #include <iostream>
@@ -31,83 +33,128 @@ const unsigned long long MAX_ATOMS = 1000000000000000000ULL;
 
 void print_inventory() {
     std::cout << "Inventory:" << std::endl;
-    for (const auto &pair : atom_inventory) {
+    for (const auto &pair : atom_inventory)
         std::cout << pair.first << ": " << pair.second << std::endl;
+
+    std::cout << "Inventory:" << std::endl;
     }
-}
+
+
 
 void process_tcp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
-    std::string action, atom;
+    std::string action, item;
     unsigned long long number;
 
-    if (iss >> action >> atom >> number && action == "ADD") {
-        if (atom == "CARBON" || atom == "OXYGEN" || atom == "HYDROGEN") {
-            if (atom_inventory[atom] + number <= MAX_ATOMS) {
-                atom_inventory[atom] += number;
-            } else {
-                atom_inventory[atom] = MAX_ATOMS;
-            }
-            print_inventory();
+    if (iss >> action >> item >> number && action == "ADD") {
+        // אפשר להוסיף אטומים וגם מולקולות ישירות
+        if (atom_inventory[item] + number <= MAX_ATOMS) {
+            atom_inventory[item] += number;
         } else {
-            std::cerr << "Invalid atom type!" << std::endl;
+            atom_inventory[item] = MAX_ATOMS;
         }
+        print_inventory();
     } else {
         std::cerr << "Invalid TCP command!" << std::endl;
     }
 }
 
-unsigned long long calculate_molecule(const std::string &molecule) {
-    if (molecule == "WATER") {
-        return std::min(atom_inventory["OXYGEN"] / 1, atom_inventory["HYDROGEN"] / 2);
-    }
-    if (molecule == "CARBON DIOXIDE") {
-        return std::min(atom_inventory["CARBON"] / 1, atom_inventory["OXYGEN"] / 2);
-    }
-    if (molecule == "ALCOHOL") {
-        return std::min({atom_inventory["CARBON"] / 2, atom_inventory["HYDROGEN"] / 6, atom_inventory["OXYGEN"] / 1});
-    }
-    if (molecule == "GLUCOSE") {
-        return std::min({atom_inventory["CARBON"] / 6, atom_inventory["HYDROGEN"] / 12, atom_inventory["OXYGEN"] / 6});
-    }
-    return 0;
-}
-
-bool process_udp_command(const std::string &cmd, std::string &response) {
+/**
+ * Processes UDP commands to deliver molecules.
+ * Format: DELIVER <MOLECULE> <NUMBER>
+ * Returns true if the delivery was successful.
+ */
+bool process_udp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, molecule;
     unsigned long long number;
 
-    if (iss >> action >> molecule >> number && action == "DELIVER") {
-        std::string second;
-        if (molecule == "CARBON" && iss >> second && second == "DIOXIDE") {
-            molecule = "CARBON DIOXIDE";
-        }
-
-        if (molecule == "WATER" || molecule == "CARBON DIOXIDE" || molecule == "ALCOHOL" || molecule == "GLUCOSE") {
-            unsigned long long available = calculate_molecule(molecule);
-            if (available >= number) {
-                response = "CAN DELIVER " + std::to_string(number) + " " + molecule + " (max available: " + std::to_string(available) + ")";
-                return true;
-            } else {
-                response = "CANNOT DELIVER. Max available: " + std::to_string(available);
-                return false;
-            }
-        } else {
-            response = "Invalid molecule!";
-            return false;
-        }
+    if (!(iss >> action)) {
+        std::cerr << "Invalid UDP command!" << std::endl;
+        return false;
     }
 
-    response = "Invalid UDP command!";
-    return false;
+    if (action != "DELIVER") {
+        std::cerr << "Invalid action! need to start with DELIVER" << std::endl;
+        return false;
+    }
+
+    // קרא את המולקולה (או מילה ראשונה של המולקולה)
+    if (!(iss >> molecule)) {
+        std::cerr << "Invalid UDP command!" << std::endl;
+        return false;
+    }
+
+    unsigned long long needed_C=0, needed_O=0, needed_H=0;
+    std::string molecule_name = molecule;
+
+    // בדיקה האם זו מולקולה עם שתי מילים (CARBON DIOXIDE)
+    if (molecule == "CARBON") {
+        std::string second_word;
+        if (!(iss >> second_word)) {
+            std::cerr << "Incomplete CARBON DIOXIDE command!" << std::endl;
+            return false;
+        }
+        if (second_word != "DIOXIDE") {
+            std::cerr << "Invalid molecule!" << std::endl;
+            return false;
+        }
+        molecule_name = "CARBON DIOXIDE";
+        if (!(iss >> number)) {
+            std::cerr << "Missing number!" << std::endl;
+            return false;
+        }
+        needed_C = 1 * number;
+        needed_O = 2 * number;
+    }
+    else if (molecule == "WATER" || molecule == "ALCOHOL" || molecule == "GLUCOSE") {
+        if (!(iss >> number)) {
+            std::cerr << "Missing number!" << std::endl;
+            return false;
+        }
+        if (molecule == "WATER") {
+            needed_H = 2 * number;
+            needed_O = 1 * number;
+        } else if (molecule == "ALCOHOL") {
+            needed_C = 2 * number;
+            needed_H = 6 * number;
+            needed_O = 1 * number;
+        } else if (molecule == "GLUCOSE") {
+            needed_C = 6 * number;
+            needed_H = 12 * number;
+            needed_O = 6 * number;
+        }
+    }
+    else {
+        std::cerr << "Invalid molecule!" << std::endl;
+        return false;
+    }
+
+    // Check if there are enough atoms
+    if (atom_inventory["CARBON"] >= needed_C &&
+        atom_inventory["OXYGEN"] >= needed_O &&
+        atom_inventory["HYDROGEN"] >= needed_H) {
+        // הורד את האטומים מהמלאי
+        atom_inventory["CARBON"] -= needed_C;
+        atom_inventory["OXYGEN"] -= needed_O;
+        atom_inventory["HYDROGEN"] -= needed_H;
+
+        // הוסף את המולקולה למלאי!
+        atom_inventory[molecule_name] += number;
+
+        print_inventory();
+        return true;
+    } else {
+        std::cerr << "Not enough atoms" << std::endl;
+        return false;
+    }
 }
 
 void process_console_command(const std::string &cmd) {
-    unsigned long long water = calculate_molecule("WATER");
-    unsigned long long carbon_dioxide = calculate_molecule("CARBON DIOXIDE");
-    unsigned long long alcohol = calculate_molecule("ALCOHOL");
-    unsigned long long glucose = calculate_molecule("GLUCOSE");
+    unsigned long long water = atom_inventory["WATER"];
+    unsigned long long carbon_dioxide = atom_inventory["CARBON DIOXIDE"];
+    unsigned long long alcohol = atom_inventory["ALCOHOL"];
+    unsigned long long glucose = atom_inventory["GLUCOSE"];
 
     if (cmd == "GEN SOFT DRINK") {
         unsigned long long count = std::min({water, carbon_dioxide, glucose});
@@ -131,6 +178,7 @@ int main(int argc, char *argv[]) {
     int tcp_port = std::stoi(argv[1]);
     int udp_port = std::stoi(argv[2]);
 
+    // TCP socket setup
     int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -141,6 +189,7 @@ int main(int argc, char *argv[]) {
     bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
     listen(tcp_sock, MAX_CLIENTS);
 
+    // UDP socket setup
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in udp_addr{};
     udp_addr.sin_family = AF_INET;
@@ -155,7 +204,8 @@ int main(int argc, char *argv[]) {
     FD_SET(STDIN_FILENO, &master);
     int fdmax = std::max({tcp_sock, udp_sock, STDIN_FILENO});
 
-    std::cout << "Bar server (check only) started on TCP port " << tcp_port << " and UDP port " << udp_port << std::endl;
+    std::cout << "Drinks Bar Server started on TCP port " << tcp_port
+              << " and UDP port " << udp_port << std::endl;
 
     while (true) {
         read_fds = master;
@@ -181,8 +231,7 @@ int main(int argc, char *argv[]) {
                     socklen_t len = sizeof(client_addr);
                     int n = recvfrom(udp_sock, buf, sizeof(buf)-1, 0, (sockaddr*)&client_addr, &len);
                     buf[n] = '\0';
-                    std::string response;
-                    process_udp_command(buf, response);
+                    std::string response = process_udp_command(buf) ? "DELIVERED" : "FAILED";
                     sendto(udp_sock, response.c_str(), response.size(), 0, (sockaddr*)&client_addr, len);
                 } else if (i == STDIN_FILENO) {
                     std::string line;

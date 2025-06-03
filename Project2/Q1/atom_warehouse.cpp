@@ -52,7 +52,11 @@ void process_command(const std::string &cmd) {
     unsigned long long number;
 
     // Parse the command
-    if (iss >> action >> atom >> number && action == "ADD") {
+    if (iss >> action >> atom >> number && action == "ADD" ) {
+        if (atom != "CARBON" && atom != "OXYGEN" && atom != "HYDROGEN") {
+            std::cerr << "Invalid atom type! Only CARBON, OXYGEN, and HYDROGEN are allowed." << std::endl;
+            return;
+        }
         // Ensure the count does not exceed the maximum allowed for each atom type
         if (atom_inventory[atom] + number <= MAX_ATOMS) {
             atom_inventory[atom] += number;
@@ -61,7 +65,7 @@ void process_command(const std::string &cmd) {
         }
         print_inventory();
     } else {
-        std::cerr << "Invalid command!" << std::endl;
+        std::cerr << "Invalid command! need to be: ADD <ATOM TYPE> <NUMBER>" << std::endl;
     }
 }
 

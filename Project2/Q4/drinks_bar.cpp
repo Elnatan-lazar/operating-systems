@@ -1,13 +1,11 @@
 /*
- * supplier_molecule.cpp
+ * drinks_bar.cpp
  *
- * A server that manages a warehouse of atoms and can deliver molecules.
- * Supports both TCP (adding atoms) and UDP (delivering molecules).
+ * A unified server to manage atoms and molecules with TCP/UDP/console commands.
+ * Supports initialization of atom inventory via command-line arguments.
  *
- * Usage:
- *   ./supplier_molecule <tcp_port> <udp_port>
- *
- * Author: Elnatan Lazar
+ * Usage example:
+ *   ./drinks_bar -T 5555 -U 6666 -c 100 -o 200 -h 300 -t 60
  */
 
 #include <iostream>
@@ -20,21 +18,25 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <algorithm>
+#include <getopt.h>
+#include <csignal>
 
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 
 std::unordered_map<std::string, unsigned long long> atom_inventory;
-const unsigned long long MAX_ATOMS = 1000000000000000000ULL; // 10^18
+const unsigned long long MAX_ATOMS = 1000000000000000000ULL;
 
-/**
- * Prints the current inventory of the warehouse.
- */
+int tcp_port = -1;
+int udp_port = -1;
+int timeout_sec = 0;
+
 void print_inventory() {
     std::cout << "Inventory:" << std::endl;
-    for (const auto &pair : atom_inventory) {
+    for (const auto &pair : atom_inventory)
         std::cout << pair.first << ": " << pair.second << std::endl;
-    }
+    std::cout << std::endl;
 }
 
 /**
@@ -153,21 +155,69 @@ bool process_udp_command(const std::string &cmd) {
     }
 }
 
+void process_console_command(const std::string &cmd) {
+    unsigned long long water = atom_inventory["WATER"];
+    unsigned long long carbon_dioxide = atom_inventory["CARBON DIOXIDE"];
+    unsigned long long alcohol = atom_inventory["ALCOHOL"];
+    unsigned long long glucose = atom_inventory["GLUCOSE"];
 
+    if (cmd == "GEN SOFT DRINK") {
+        std::cout << "SOFT DRINKs available: " << std::min({water, carbon_dioxide, glucose}) << std::endl;
+    } else if (cmd == "GEN VODKA") {
+        std::cout << "VODKA drinks available: " << std::min({water, alcohol, glucose}) << std::endl;
+    } else if (cmd == "GEN CHAMPAGNE") {
+        std::cout << "CHAMPAGNE drinks available: " << std::min({water, carbon_dioxide, alcohol}) << std::endl;
+    } else {
+        std::cerr << "Invalid console command!" << std::endl;
+    }
+}
+
+// טיימאאוט - סוגר את השרת
+void handle_alarm(int sig) {
+    std::cout << "No activity for " << timeout_sec << " seconds. Shutting down server." << std::endl;
+    exit(0);
+}
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <tcp_port> <udp_port>" << std::endl;
+    int opt;
+    struct option long_opts[] = {
+            {"tcp-port", required_argument, nullptr, 'T'},
+            {"udp-port", required_argument, nullptr, 'U'},
+            {"carbon", required_argument, nullptr, 'c'},
+            {"oxygen", required_argument, nullptr, 'o'},
+            {"hydrogen", required_argument, nullptr, 'h'},
+            {"timeout", required_argument, nullptr, 't'},
+            {nullptr, 0, nullptr, 0}
+    };
+
+    while ((opt = getopt_long(argc, argv, "T:U:c:o:h:t:", long_opts, nullptr)) != -1) {
+        switch (opt) {
+            case 'T': tcp_port = std::stoi(optarg); break;
+            case 'U': udp_port = std::stoi(optarg); break;
+            case 'c': atom_inventory["CARBON"] = std::stoull(optarg); break;
+            case 'o': atom_inventory["OXYGEN"] = std::stoull(optarg); break;
+            case 'h': atom_inventory["HYDROGEN"] = std::stoull(optarg); break;
+            case 't': timeout_sec = std::stoi(optarg); break;
+            default:
+                std::cerr << "Usage: " << argv[0] << " -T <tcp_port> -U <udp_port> [-c <carbon>] [-o <oxygen>] [-h <hydrogen>] [-t <timeout>]" << std::endl;
+                return 1;
+        }
+    }
+
+    if (tcp_port == -1 || udp_port == -1) {
+        std::cerr << "Error: TCP and UDP ports are mandatory." << std::endl;
         return 1;
     }
-    int tcp_port = std::stoi(argv[1]);
-    int udp_port = std::stoi(argv[2]);
 
-    // TCP socket setup
+    if (timeout_sec > 0) {
+        signal(SIGALRM, handle_alarm);
+        alarm(timeout_sec);
+    }
+
+    // TCP
     int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
-    int opt = 1;
-    setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
+    int optval = 1;
+    setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     sockaddr_in tcp_addr{};
     tcp_addr.sin_family = AF_INET;
     tcp_addr.sin_addr.s_addr = INADDR_ANY;
@@ -175,7 +225,7 @@ int main(int argc, char *argv[]) {
     bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
     listen(tcp_sock, MAX_CLIENTS);
 
-    // UDP socket setup
+    // UDP
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in udp_addr{};
     udp_addr.sin_family = AF_INET;
@@ -183,21 +233,24 @@ int main(int argc, char *argv[]) {
     udp_addr.sin_port = htons(udp_port);
     bind(udp_sock, (sockaddr*)&udp_addr, sizeof(udp_addr));
 
-    // select() setup
-    fd_set master_set, read_fds;
-    FD_ZERO(&master_set);
-    FD_SET(tcp_sock, &master_set);
-    FD_SET(udp_sock, &master_set);
-    int fdmax = std::max(tcp_sock, udp_sock);
+    fd_set master, read_fds;
+    FD_ZERO(&master);
+    FD_SET(tcp_sock, &master);
+    FD_SET(udp_sock, &master);
+    FD_SET(STDIN_FILENO, &master);
+    int fdmax = std::max({tcp_sock, udp_sock, STDIN_FILENO});
 
-    std::cout << "Server started! TCP port: " << tcp_port << ", UDP port: " << udp_port << std::endl;
+    std::cout << "Drinks Bar Server started!" << std::endl;
+    print_inventory();
 
     while (true) {
-        read_fds = master_set;
+        read_fds = master;
         if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
             perror("select");
             exit(1);
         }
+
+        if (timeout_sec > 0) alarm(timeout_sec);  // reset timer
 
         for (int i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds)) {
@@ -206,7 +259,7 @@ int main(int argc, char *argv[]) {
                     socklen_t cli_len = sizeof(cli_addr);
                     int new_fd = accept(tcp_sock, (sockaddr*)&cli_addr, &cli_len);
                     if (new_fd != -1) {
-                        FD_SET(new_fd, &master_set);
+                        FD_SET(new_fd, &master);
                         if (new_fd > fdmax) fdmax = new_fd;
                         std::cout << "New TCP client connected." << std::endl;
                     }
@@ -216,19 +269,22 @@ int main(int argc, char *argv[]) {
                     socklen_t len = sizeof(client_addr);
                     int n = recvfrom(udp_sock, buf, sizeof(buf)-1, 0, (sockaddr*)&client_addr, &len);
                     buf[n] = '\0';
-
-                    std::string response = process_udp_command(std::string(buf)) ? "DELIVERED" : "FAILED";
+                    std::string response = process_udp_command(buf) ? "DELIVERED" : "FAILED";
                     sendto(udp_sock, response.c_str(), response.size(), 0, (sockaddr*)&client_addr, len);
+                } else if (i == STDIN_FILENO) {
+                    std::string line;
+                    std::getline(std::cin, line);
+                    process_console_command(line);
                 } else {
                     char buf[BUFFER_SIZE];
                     int nbytes = recv(i, buf, sizeof(buf)-1, 0);
                     if (nbytes <= 0) {
                         std::cout << "TCP client disconnected." << std::endl;
                         close(i);
-                        FD_CLR(i, &master_set);
+                        FD_CLR(i, &master);
                     } else {
                         buf[nbytes] = '\0';
-                        process_tcp_command(std::string(buf));
+                        process_tcp_command(buf);
                     }
                 }
             }

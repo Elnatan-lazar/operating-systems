@@ -1,11 +1,11 @@
-all: bar_drinks client_bar
+all: drinks_bar client_bar
 
-bar_drinks: bar_drinks.cpp
-	g++ -Wall -o bar_drinks bar_drinks.cpp
+drinks_bar: drinks_bar.cpp
+	g++ -Wall -o drinks_bar drinks_bar.cpp
 
 client_bar: client_bar.cpp
 	g++ -Wall -o client_bar client_bar.cpp
 
 clean:
-	rm -f bar_drinks client_bar
+	rm -f drinks_bar client_bar
 .PHONY: all clean
