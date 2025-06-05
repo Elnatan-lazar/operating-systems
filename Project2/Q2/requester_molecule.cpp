@@ -1,14 +1,3 @@
-/*
- * requester_molecule.cpp
- *
- * A UDP client to request molecules from supplier_molecule server.
- *
- * Usage:
- *   ./requester_molecule <hostname> <udp_port>
- *
- * Author: Elnatan Lazar
- */
-
 #include <iostream>
 #include <string>
 #include <cstring>

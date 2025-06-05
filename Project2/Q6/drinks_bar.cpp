@@ -1,10 +1,3 @@
-/*
- * drinks_bar.cpp
- *
- * Unified server supporting TCP/UDP and UNIX Domain Sockets (stream & datagram),
- * with persistent shared inventory file using mmap and file locking.
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -22,7 +15,7 @@
 #include <csignal>
 #include <algorithm>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 struct Inventory {

@@ -1,10 +1,3 @@
-/*
- * client_bar.cpp
- *
- * Usage:
- *   ./client_bar <tcp|udp> <hostname> <port>
- */
-
 #include <iostream>
 #include <string>
 #include <cstring>

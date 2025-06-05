@@ -1,18 +1,3 @@
-/*
- * drinks_bar.cpp
- *
- * A TCP/UDP server to manage a warehouse of atoms and molecules.
- * Also handles console commands to check available drinks.
- *
- * TCP: ADD CARBON/OXYGEN/HYDROGEN/WATER/ALCOHOL/GLUCOSE/CARBON DIOXIDE <number>
- *      (updates inventory directly).
- * UDP: DELIVER <MOLECULE> <number> (removes from molecule inventory if enough).
- * Console: GEN ... (checks how many drinks can be created from existing molecules).
- *
- * Usage:
- *   ./drinks_bar <tcp_port> <udp_port>
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -25,7 +10,7 @@
 #include <sys/select.h>
 #include <algorithm>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 std::unordered_map<std::string, unsigned long long> atom_inventory;

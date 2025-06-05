@@ -1,11 +1,3 @@
-/*
- * supplier_atom.cpp
- *
- * A TCP client to add atoms or molecules to the drinks bar server.
- * Usage:
- *   ./supplier_atom -h <hostname> -p <port>
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>

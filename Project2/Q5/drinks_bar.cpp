@@ -1,10 +1,3 @@
-/*
- * drinks_bar.cpp
- *
- * Unified server supporting TCP/UDP and UNIX Domain Sockets (stream & datagram),
- * and console commands to manage atoms and molecules.
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -20,7 +13,7 @@
 #include <csignal>
 #include <algorithm>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 std::unordered_map<std::string, unsigned long long> atom_inventory;

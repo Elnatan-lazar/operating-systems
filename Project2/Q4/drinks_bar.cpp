@@ -1,13 +1,3 @@
-/*
- * drinks_bar.cpp
- *
- * A unified server to manage atoms and molecules with TCP/UDP/console commands.
- * Supports initialization of atom inventory via command-line arguments.
- *
- * Usage example:
- *   ./drinks_bar -T 5555 -U 6666 -c 100 -o 200 -h 300 -t 60
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -22,7 +12,7 @@
 #include <getopt.h>
 #include <csignal>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 std::unordered_map<std::string, unsigned long long> atom_inventory;

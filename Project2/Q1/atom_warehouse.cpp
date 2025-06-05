@@ -1,15 +1,3 @@
-/*
- * warehouse_atom.cpp
- *
- * A TCP server to manage a dynamic warehouse of atoms.
- * Now supports any type of atom dynamically using an unordered_map.
- *
- * Usage:
- *   ./warehouse_atom <port>
- *
- * Author: Elnatan Lazar
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -21,7 +9,7 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 // Using an unordered_map to store any type of atom dynamically

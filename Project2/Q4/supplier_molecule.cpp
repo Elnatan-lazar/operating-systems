@@ -1,11 +1,3 @@
-/*
- * supplier_molecule.cpp
- *
- * A UDP client to request molecule delivery from the drinks bar server.
- * Usage:
- *   ./supplier_molecule -h <hostname> -p <port>
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>

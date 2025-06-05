@@ -1,14 +1,3 @@
-/*
- * supplier_atom.cpp
- *
- * A TCP client that connects to the warehouse_atom server and sends user commands.
- *
- * Usage:
- *   ./supplier_atom <hostname> <port>
- *
- * Author: Elnatan Lazar
- */
-
 #include <iostream>
 #include <string>
 #include <cstring>

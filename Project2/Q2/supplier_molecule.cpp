@@ -1,15 +1,3 @@
-/*
- * supplier_molecule.cpp
- *
- * A server that manages a warehouse of atoms and can deliver molecules.
- * Supports both TCP (adding atoms) and UDP (delivering molecules).
- *
- * Usage:
- *   ./supplier_molecule <tcp_port> <udp_port>
- *
- * Author: Elnatan Lazar
- */
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -21,7 +9,7 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 std::unordered_map<std::string, unsigned long long> atom_inventory;
