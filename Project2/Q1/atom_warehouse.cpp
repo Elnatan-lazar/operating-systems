@@ -23,7 +23,6 @@ void print_inventory() {
     std::cout << "Inventory:" << std::endl;
     for (const auto &pair : atom_inventory) {
         std::cout << pair.first << ": " << pair.second << std::endl;
-        
     }
 }
 
@@ -97,15 +96,17 @@ int main(int argc, char *argv[]) {
     fd_set master_set, read_fds;
     FD_ZERO(&master_set);
     FD_SET(listen_fd, &master_set);
-    int fdmax = listen_fd;
+    FD_SET(STDIN_FILENO, &master_set);  // <-- Add stdin here
+    int fdmax = std::max(listen_fd, STDIN_FILENO);
 
     std::cout << "Warehouse server (dynamic atoms) started on port " << port << "..." << std::endl;
 
     // Main server loop
-    while (true) {
+    bool running = true;
+    while (running) {
         read_fds = master_set;
 
-        // Use select() to wait for activity on any socket
+        // Use select() to wait for activity on any socket or stdin
         if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
             perror("select");
             exit(1);
@@ -124,8 +125,24 @@ int main(int argc, char *argv[]) {
                         if (new_fd > fdmax) fdmax = new_fd;
                         std::cout << "New client connected." << std::endl;
                     }
+                } else if (i == STDIN_FILENO) {
+                    // Input from keyboard
+                    std::string input_line;
+                    if (std::getline(std::cin, input_line)) {
+                        if (input_line == "exit") {
+                            std::cout << "Exit command received. Shutting down server." << std::endl;
+                            running = false;
+                            break;  // break out of the for loop
+                        } else {
+                            std::cout << "Unknown command: " << input_line << std::endl;
+                        }
+                    } else {
+                        std::cout << "Input closed. Shutting down server." << std::endl;
+                        running = false;
+                        break;
+                    }
                 } else {
-                    // Data from an existing client
+                    // Data from existing client
                     char buf[BUFFER_SIZE];
                     int nbytes = recv(i, buf, sizeof(buf) - 1, 0);
                     if (nbytes <= 0) {
@@ -141,5 +158,11 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+
+    // Cleanup sockets on shutdown
+    close(listen_fd);
+    // Close any other sockets if you track them
+
+    std::cout << "Server has shut down gracefully." << std::endl;
     return 0;
 }
