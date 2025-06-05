@@ -473,6 +473,16 @@ int main(int argc, char *argv[]) {
                 else if (i == STDIN_FILENO) {
                     std::string line;
                     std::getline(std::cin, line);
+                    if(line =="EXIT"|| line == "exit") {
+                        std::cout << "Exit command received. Shutting down server." << std::endl;
+
+                        if (inventory != nullptr) save_inventory_to_file();
+                        exit(0);
+                    }
+                    else if (line == "PRINT") {
+                        print_inventory();
+                    }
+                    else
                     process_console_command(line);
                 }
                     // TCP/UDS Stream data

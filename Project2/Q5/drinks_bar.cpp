@@ -309,6 +309,10 @@ int main(int argc, char *argv[]) {
                 else if (i == STDIN_FILENO) {
                     std::string line;
                     std::getline(std::cin, line);
+                    if(line =="exit" || line == "quit") {
+                        std::cout << "Shutting down server." << std::endl;
+                        exit(0);
+                    }
                     process_console_command(line);
                 }
                     // TCP/UDS Stream data

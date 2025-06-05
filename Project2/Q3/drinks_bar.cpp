@@ -28,6 +28,10 @@ void process_tcp_command(const std::string &cmd) {
     unsigned long long number;
 
     if (iss >> action >> item >> number && action == "ADD") {
+        if (atom != "CARBON" && atom != "OXYGEN" && atom != "HYDROGEN") {
+            std::cerr << "Invalid atom type! Only CARBON, OXYGEN, and HYDROGEN are allowed." << std::endl;
+            return;
+        }
         if (atom_inventory[item] + number <= MAX_ATOMS) {
             atom_inventory[item] += number;
         } else {
