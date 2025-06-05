@@ -21,6 +21,7 @@ const unsigned long long MAX_ATOMS = 1000000000000000000ULL;
 int tcp_port = -1;
 int udp_port = -1;
 int timeout_sec = 0;
+bool running = true;
 
 void print_inventory() {
     std::cout << "Inventory:" << std::endl;
@@ -29,10 +30,6 @@ void print_inventory() {
     std::cout << std::endl;
 }
 
-/**
- * Processes TCP commands to add atoms.
- * Format: ADD <ATOM_TYPE> <NUMBER>
- */
 void process_tcp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, atom;
@@ -54,11 +51,6 @@ void process_tcp_command(const std::string &cmd) {
     }
 }
 
-/**
- * Processes UDP commands to deliver molecules.
- * Format: DELIVER <MOLECULE> <NUMBER>
- * Returns true if the delivery was successful.
- */
 bool process_udp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, molecule;
@@ -74,7 +66,6 @@ bool process_udp_command(const std::string &cmd) {
         return false;
     }
 
-    // קרא את המולקולה (או מילה ראשונה של המולקולה)
     if (!(iss >> molecule)) {
         std::cerr << "Invalid UDP command!" << std::endl;
         return false;
@@ -83,7 +74,6 @@ bool process_udp_command(const std::string &cmd) {
     unsigned long long needed_C=0, needed_O=0, needed_H=0;
     std::string molecule_name = molecule;
 
-    // בדיקה האם זו מולקולה עם שתי מילים (CARBON DIOXIDE)
     if (molecule == "CARBON") {
         std::string second_word;
         if (!(iss >> second_word)) {
@@ -95,48 +85,39 @@ bool process_udp_command(const std::string &cmd) {
             return false;
         }
         molecule_name = "CARBON DIOXIDE";
-        if (!(iss >> number)) {
-            std::cerr << "Missing number!" << std::endl;
-            return false;
-        }
+    }
+
+    if (!(iss >> number)) {
+        std::cerr << "Missing number!" << std::endl;
+        return false;
+    }
+
+    if (molecule_name == "WATER") {
+        needed_H = 2 * number;
+        needed_O = 1 * number;
+    } else if (molecule_name == "ALCOHOL") {
+        needed_C = 2 * number;
+        needed_H = 6 * number;
+        needed_O = 1 * number;
+    } else if (molecule_name == "GLUCOSE") {
+        needed_C = 6 * number;
+        needed_H = 12 * number;
+        needed_O = 6 * number;
+    } else if (molecule_name == "CARBON DIOXIDE") {
         needed_C = 1 * number;
         needed_O = 2 * number;
-    }
-    else if (molecule == "WATER" || molecule == "ALCOHOL" || molecule == "GLUCOSE") {
-        if (!(iss >> number)) {
-            std::cerr << "Missing number!" << std::endl;
-            return false;
-        }
-        if (molecule == "WATER") {
-            needed_H = 2 * number;
-            needed_O = 1 * number;
-        } else if (molecule == "ALCOHOL") {
-            needed_C = 2 * number;
-            needed_H = 6 * number;
-            needed_O = 1 * number;
-        } else if (molecule == "GLUCOSE") {
-            needed_C = 6 * number;
-            needed_H = 12 * number;
-            needed_O = 6 * number;
-        }
-    }
-    else {
+    } else {
         std::cerr << "Invalid molecule!" << std::endl;
         return false;
     }
 
-    // Check if there are enough atoms
     if (atom_inventory["CARBON"] >= needed_C &&
         atom_inventory["OXYGEN"] >= needed_O &&
         atom_inventory["HYDROGEN"] >= needed_H) {
-        // הורד את האטומים מהמלאי
         atom_inventory["CARBON"] -= needed_C;
         atom_inventory["OXYGEN"] -= needed_O;
         atom_inventory["HYDROGEN"] -= needed_H;
-
-        // הוסף את המולקולה למלאי!
         atom_inventory[molecule_name] += number;
-
         print_inventory();
         return true;
     } else {
@@ -146,6 +127,12 @@ bool process_udp_command(const std::string &cmd) {
 }
 
 void process_console_command(const std::string &cmd) {
+    if (cmd == "EXIT"|| cmd =="exit") {
+        std::cout << "Shutting down server by console command." << std::endl;
+        running = false;
+        return;
+    }
+
     unsigned long long water = atom_inventory["WATER"];
     unsigned long long carbon_dioxide = atom_inventory["CARBON DIOXIDE"];
     unsigned long long alcohol = atom_inventory["ALCOHOL"];
@@ -162,10 +149,9 @@ void process_console_command(const std::string &cmd) {
     }
 }
 
-// טיימאאוט - סוגר את השרת
 void handle_alarm(int sig) {
     std::cout << "No activity for " << timeout_sec << " seconds. Shutting down server." << std::endl;
-    exit(0);
+    running = false;
 }
 
 int main(int argc, char *argv[]) {
@@ -204,7 +190,7 @@ int main(int argc, char *argv[]) {
         alarm(timeout_sec);
     }
 
-    // TCP
+    // TCP socket setup
     int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
     int optval = 1;
     setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
@@ -215,7 +201,7 @@ int main(int argc, char *argv[]) {
     bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
     listen(tcp_sock, MAX_CLIENTS);
 
-    // UDP
+    // UDP socket setup
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in udp_addr{};
     udp_addr.sin_family = AF_INET;
@@ -233,14 +219,14 @@ int main(int argc, char *argv[]) {
     std::cout << "Drinks Bar Server started!" << std::endl;
     print_inventory();
 
-    while (true) {
+    while (running) {
         read_fds = master;
         if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
             perror("select");
             exit(1);
         }
 
-        if (timeout_sec > 0) alarm(timeout_sec);  // reset timer
+        if (timeout_sec > 0) alarm(timeout_sec);
 
         for (int i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds)) {
@@ -280,5 +266,9 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+    std::cout << "Server shutting down." << std::endl;
+    close(tcp_sock);
+    close(udp_sock);
+
     return 0;
 }
