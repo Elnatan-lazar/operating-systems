@@ -20,7 +20,11 @@ void print_inventory() {
     std::cout << "Inventory:" << std::endl;
     for (const auto &pair : atom_inventory)
         std::cout << pair.first << ": " << pair.second << std::endl;
-}
+
+    std::cout << "Inventory:" << std::endl;
+    }
+
+
 
 void process_tcp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
@@ -28,10 +32,11 @@ void process_tcp_command(const std::string &cmd) {
     unsigned long long number;
 
     if (iss >> action >> item >> number && action == "ADD") {
-        if (item != "CARBON" && item != "OXYGEN" && item != "HYDROGEN") {
-            std::cerr << "Invalid atom type! Only CARBON, OXYGEN, and HYDROGEN are allowed." << std::endl;
+        if(item!= "CARBON" && item != "OXYGEN" && item != "HYDROGEN") {
+            std::cerr << "Invalid atom !" << std::endl;
             return;
         }
+        // אפשר להוסיף אטומים וגם מולקולות ישירות
         if (atom_inventory[item] + number <= MAX_ATOMS) {
             atom_inventory[item] += number;
         } else {
@@ -43,6 +48,11 @@ void process_tcp_command(const std::string &cmd) {
     }
 }
 
+/**
+ * Processes UDP commands to deliver molecules.
+ * Format: DELIVER <MOLECULE> <NUMBER>
+ * Returns true if the delivery was successful.
+ */
 bool process_udp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, molecule;
@@ -58,6 +68,7 @@ bool process_udp_command(const std::string &cmd) {
         return false;
     }
 
+    // קרא את המולקולה (או מילה ראשונה של המולקולה)
     if (!(iss >> molecule)) {
         std::cerr << "Invalid UDP command!" << std::endl;
         return false;
@@ -66,6 +77,7 @@ bool process_udp_command(const std::string &cmd) {
     unsigned long long needed_C=0, needed_O=0, needed_H=0;
     std::string molecule_name = molecule;
 
+    // בדיקה האם זו מולקולה עם שתי מילים (CARBON DIOXIDE)
     if (molecule == "CARBON") {
         std::string second_word;
         if (!(iss >> second_word)) {
@@ -107,18 +119,43 @@ bool process_udp_command(const std::string &cmd) {
         return false;
     }
 
+    // Check if there are enough atoms
     if (atom_inventory["CARBON"] >= needed_C &&
         atom_inventory["OXYGEN"] >= needed_O &&
         atom_inventory["HYDROGEN"] >= needed_H) {
+        // הורד את האטומים מהמלאי
         atom_inventory["CARBON"] -= needed_C;
         atom_inventory["OXYGEN"] -= needed_O;
         atom_inventory["HYDROGEN"] -= needed_H;
+
+        // הוסף את המולקולה למלאי!
         atom_inventory[molecule_name] += number;
+
         print_inventory();
         return true;
     } else {
         std::cerr << "Not enough atoms" << std::endl;
         return false;
+    }
+}
+
+void process_console_command(const std::string &cmd) {
+    unsigned long long water = atom_inventory["WATER"];
+    unsigned long long carbon_dioxide = atom_inventory["CARBON DIOXIDE"];
+    unsigned long long alcohol = atom_inventory["ALCOHOL"];
+    unsigned long long glucose = atom_inventory["GLUCOSE"];
+
+    if (cmd == "GEN SOFT DRINK") {
+        unsigned long long count = std::min({water, carbon_dioxide, glucose});
+        std::cout << "SOFT DRINKs available: " << count << std::endl;
+    } else if (cmd == "GEN VODKA") {
+        unsigned long long count = std::min({water, alcohol, glucose});
+        std::cout << "VODKA drinks available: " << count << std::endl;
+    } else if (cmd == "GEN CHAMPAGNE") {
+        unsigned long long count = std::min({water, carbon_dioxide, alcohol});
+        std::cout << "CHAMPAGNE drinks available: " << count << std::endl;
+    } else {
+        std::cerr << "Invalid console command!" << std::endl;
     }
 }
 
@@ -153,14 +190,13 @@ int main(int argc, char *argv[]) {
     FD_ZERO(&master);
     FD_SET(tcp_sock, &master);
     FD_SET(udp_sock, &master);
-    FD_SET(STDIN_FILENO, &master);  // הוספת STDIN למעקב
+    FD_SET(STDIN_FILENO, &master);
     int fdmax = std::max({tcp_sock, udp_sock, STDIN_FILENO});
 
     std::cout << "Drinks Bar Server started on TCP port " << tcp_port
               << " and UDP port " << udp_port << std::endl;
 
-    bool running = true;
-    while (running) {
+    while (true) {
         read_fds = master;
         if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
             perror("select");
@@ -189,13 +225,13 @@ int main(int argc, char *argv[]) {
                 } else if (i == STDIN_FILENO) {
                     std::string line;
                     std::getline(std::cin, line);
-                    if (line == "exit") {
-                        std::cout << "Exit command received. Shutting down server." << std::endl;
-                        running = false;
-                        break;
-                    } else {
-                        std::cout << "Unknown command: " << line << std::endl;
+                    if(line == "exit" || line == "EXIT") {
+                        std::cout << "Shutting down server..." << std::endl;
+                        close(tcp_sock);
+                        close(udp_sock);
+                        return 0;
                     }
+                    process_console_command(line);
                 } else {
                     char buf[BUFFER_SIZE];
                     int nbytes = recv(i, buf, sizeof(buf)-1, 0);
@@ -211,10 +247,5 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-
-    close(tcp_sock);
-    close(udp_sock);
-
-    std::cout << "Server has shut down gracefully." << std::endl;
     return 0;
 }
