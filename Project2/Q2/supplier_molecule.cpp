@@ -15,9 +15,6 @@
 std::unordered_map<std::string, unsigned long long> atom_inventory;
 const unsigned long long MAX_ATOMS = 1000000000000000000ULL; // 10^18
 
-/**
- * Prints the current inventory of the warehouse.
- */
 void print_inventory() {
     std::cout << "Inventory:" << std::endl;
     for (const auto &pair : atom_inventory) {
@@ -25,10 +22,6 @@ void print_inventory() {
     }
 }
 
-/**
- * Processes TCP commands to add atoms.
- * Format: ADD <ATOM_TYPE> <NUMBER>
- */
 void process_tcp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, atom;
@@ -50,11 +43,6 @@ void process_tcp_command(const std::string &cmd) {
     }
 }
 
-/**
- * Processes UDP commands to deliver molecules.
- * Format: DELIVER <MOLECULE> <NUMBER>
- * Returns true if the delivery was successful.
- */
 bool process_udp_command(const std::string &cmd) {
     std::istringstream iss(cmd);
     std::string action, molecule;
@@ -70,7 +58,6 @@ bool process_udp_command(const std::string &cmd) {
         return false;
     }
 
-    // קרא את המולקולה (או מילה ראשונה של המולקולה)
     if (!(iss >> molecule)) {
         std::cerr << "Invalid UDP command!" << std::endl;
         return false;
@@ -79,60 +66,40 @@ bool process_udp_command(const std::string &cmd) {
     unsigned long long needed_C=0, needed_O=0, needed_H=0;
     std::string molecule_name = molecule;
 
-    // בדיקה האם זו מולקולה עם שתי מילים (CARBON DIOXIDE)
     if (molecule == "CARBON") {
         std::string second_word;
-        if (!(iss >> second_word)) {
-            std::cerr << "Incomplete CARBON DIOXIDE command!" << std::endl;
-            return false;
-        }
-        if (second_word != "DIOXIDE") {
-            std::cerr << "Invalid molecule!" << std::endl;
+        if (!(iss >> second_word) || second_word != "DIOXIDE") {
+            std::cerr << "Invalid molecule! Expected 'CARBON DIOXIDE'" << std::endl;
             return false;
         }
         molecule_name = "CARBON DIOXIDE";
-        if (!(iss >> number)) {
-            std::cerr << "Missing number!" << std::endl;
-            return false;
-        }
-        needed_C = 1 * number;
-        needed_O = 2 * number;
     }
-    else if (molecule == "WATER" || molecule == "ALCOHOL" || molecule == "GLUCOSE") {
-        if (!(iss >> number)) {
-            std::cerr << "Missing number!" << std::endl;
-            return false;
-        }
-        if (molecule == "WATER") {
-            needed_H = 2 * number;
-            needed_O = 1 * number;
-        } else if (molecule == "ALCOHOL") {
-            needed_C = 2 * number;
-            needed_H = 6 * number;
-            needed_O = 1 * number;
-        } else if (molecule == "GLUCOSE") {
-            needed_C = 6 * number;
-            needed_H = 12 * number;
-            needed_O = 6 * number;
-        }
+
+    if (!(iss >> number)) {
+        std::cerr << "Missing number!" << std::endl;
+        return false;
     }
-    else {
+
+    if (molecule_name == "WATER") {
+        needed_H=2*number; needed_O=1*number;
+    } else if (molecule_name == "ALCOHOL") {
+        needed_C=2*number; needed_H=6*number; needed_O=1*number;
+    } else if (molecule_name == "GLUCOSE") {
+        needed_C=6*number; needed_H=12*number; needed_O=6*number;
+    } else if (molecule_name == "CARBON DIOXIDE") {
+        needed_C=1*number; needed_O=2*number;
+    } else {
         std::cerr << "Invalid molecule!" << std::endl;
         return false;
     }
 
-    // Check if there are enough atoms
     if (atom_inventory["CARBON"] >= needed_C &&
         atom_inventory["OXYGEN"] >= needed_O &&
         atom_inventory["HYDROGEN"] >= needed_H) {
-        // הורד את האטומים מהמלאי
         atom_inventory["CARBON"] -= needed_C;
         atom_inventory["OXYGEN"] -= needed_O;
         atom_inventory["HYDROGEN"] -= needed_H;
-
-        // הוסף את המולקולה למלאי!
         atom_inventory[molecule_name] += number;
-
         print_inventory();
         return true;
     } else {
@@ -140,8 +107,6 @@ bool process_udp_command(const std::string &cmd) {
         return false;
     }
 }
-
-
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -151,7 +116,6 @@ int main(int argc, char *argv[]) {
     int tcp_port = std::stoi(argv[1]);
     int udp_port = std::stoi(argv[2]);
 
-    // TCP socket setup
     int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -163,7 +127,6 @@ int main(int argc, char *argv[]) {
     bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
     listen(tcp_sock, MAX_CLIENTS);
 
-    // UDP socket setup
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in udp_addr{};
     udp_addr.sin_family = AF_INET;
@@ -171,16 +134,18 @@ int main(int argc, char *argv[]) {
     udp_addr.sin_port = htons(udp_port);
     bind(udp_sock, (sockaddr*)&udp_addr, sizeof(udp_addr));
 
-    // select() setup
     fd_set master_set, read_fds;
     FD_ZERO(&master_set);
     FD_SET(tcp_sock, &master_set);
     FD_SET(udp_sock, &master_set);
-    int fdmax = std::max(tcp_sock, udp_sock);
+    FD_SET(STDIN_FILENO, &master_set);  // Added stdin monitoring
+    int fdmax = std::max(tcp_sock, std::max(udp_sock, STDIN_FILENO));
+
 
     std::cout << "Server started! TCP port: " << tcp_port << ", UDP port: " << udp_port << std::endl;
 
-    while (true) {
+    bool running = true;
+    while (running) {
         read_fds = master_set;
         if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
             perror("select");
@@ -207,6 +172,21 @@ int main(int argc, char *argv[]) {
 
                     std::string response = process_udp_command(std::string(buf)) ? "DELIVERED" : "FAILED";
                     sendto(udp_sock, response.c_str(), response.size(), 0, (sockaddr*)&client_addr, len);
+                } else if (i == STDIN_FILENO) {
+                    std::string input_line;
+                    if (std::getline(std::cin, input_line)) {
+                        if (input_line == "exit") {
+                            std::cout << "Exit command received. Shutting down server." << std::endl;
+                            running = false;
+                            break;
+                        } else {
+                            std::cout << "Unknown command: " << input_line << std::endl;
+                        }
+                    } else {
+                        std::cout << "Input closed. Shutting down server." << std::endl;
+                        running = false;
+                        break;
+                    }
                 } else {
                     char buf[BUFFER_SIZE];
                     int nbytes = recv(i, buf, sizeof(buf)-1, 0);
@@ -222,5 +202,10 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+
+    close(tcp_sock);
+    close(udp_sock);
+
+    std::cout << "Server has shut down gracefully." << std::endl;
     return 0;
 }
