@@ -1,0 +1,172 @@
+        -:    0:Source:atom_warehouse.cpp
+        -:    0:Graph:atom_warehouse.gcno
+        -:    0:Data:atom_warehouse.gcda
+        -:    0:Runs:1
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <sstream>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unordered_map>
+        -:    7:#include <unistd.h>
+        -:    8:#include <arpa/inet.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <sys/select.h>
+        -:   11:
+        -:   12:#define MAX_CLIENTS 100
+        -:   13:#define BUFFER_SIZE 1024
+        -:   14:
+        -:   15:// Using an unordered_map to store any type of atom dynamically
+        -:   16:std::unordered_map<std::string, unsigned long long> atom_inventory;
+        -:   17:const unsigned long long MAX_ATOMS = 1000000000000000000ULL; // 10^18
+        -:   18:
+        -:   19:/**
+        -:   20: * Prints the current inventory of the warehouse.
+        -:   21: */
+        3:   22:void print_inventory() {
+        3:   23:    std::cout << "Inventory:" << std::endl;
+        9:   24:    for (const auto &pair : atom_inventory) {
+        6:   25:        std::cout << pair.first << ": " << pair.second << std::endl;
+        -:   26:    }
+        3:   27:}
+        -:   28:
+        -:   29:/**
+        -:   30: * Processes a single command from a client.
+        -:   31: * Supported command format: ADD <ATOM_TYPE> <NUMBER>
+        -:   32: * Adds the specified number of atoms to the warehouse, creating new types if necessary.
+        -:   33: *
+        -:   34: * @param cmd A string representing the command received from the client.
+        -:   35: */
+        5:   36:void process_command(const std::string &cmd) {
+        5:   37:    std::istringstream iss(cmd);
+        5:   38:    std::string action, atom;
+        -:   39:    unsigned long long number;
+        -:   40:
+        -:   41:    // Parse the command
+        5:   42:    if (iss >> action >> atom >> number && action == "ADD" ) {
+        4:   43:        if (atom != "CARBON" && atom != "OXYGEN" && atom != "HYDROGEN") {
+        1:   44:            std::cerr << "Invalid atom type! Only CARBON, OXYGEN, and HYDROGEN are allowed." << std::endl;
+        1:   45:            return;
+        -:   46:        }
+        -:   47:        // Ensure the count does not exceed the maximum allowed for each atom type
+        3:   48:        if (atom_inventory[atom] + number <= MAX_ATOMS) {
+        3:   49:            atom_inventory[atom] += number;
+        -:   50:        } else {
+    #####:   51:            atom_inventory[atom] = MAX_ATOMS;
+        -:   52:        }
+        3:   53:        print_inventory();
+        -:   54:    } else {
+        1:   55:        std::cerr << "Invalid command! need to be: ADD <ATOM TYPE> <NUMBER>" << std::endl;
+        -:   56:    }
+        7:   57:}
+        -:   58:
+        1:   59:int main(int argc, char *argv[]) {
+        -:   60:    // Validate command-line arguments
+        1:   61:    if (argc != 2) {
+    #####:   62:        std::cerr << "Usage: " << argv[0] << " <port>" << std::endl;
+    #####:   63:        return 1;
+        -:   64:    }
+        1:   65:    int port = std::stoi(argv[1]);
+        -:   66:
+        -:   67:    // Create a TCP socket
+        1:   68:    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+        1:   69:    if (listen_fd < 0) {
+    #####:   70:        perror("socket");
+    #####:   71:        return 1;
+        -:   72:    }
+        -:   73:
+        -:   74:    // Set up the server address structure
+        1:   75:    sockaddr_in serv_addr{};
+        1:   76:    serv_addr.sin_family = AF_INET;
+        1:   77:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        1:   78:    serv_addr.sin_port = htons(port);
+        -:   79:
+        1:   80:    int opt = 1;
+        1:   81:    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        -:   82:
+        -:   83:    // Bind the socket to the specified port
+        1:   84:    if (bind(listen_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+    #####:   85:        perror("bind");
+    #####:   86:        return 1;
+        -:   87:    }
+        -:   88:
+        -:   89:    // Start listening for incoming connections
+        1:   90:    if (listen(listen_fd, MAX_CLIENTS) < 0) {
+    #####:   91:        perror("listen");
+    #####:   92:        return 1;
+        -:   93:    }
+        -:   94:
+        -:   95:    // Initialize fd_set for select()
+        -:   96:    fd_set master_set, read_fds;
+       17:   97:    FD_ZERO(&master_set);
+        1:   98:    FD_SET(listen_fd, &master_set);
+        1:   99:    FD_SET(STDIN_FILENO, &master_set);  // <-- Add stdin here
+        1:  100:    int fdmax = std::max(listen_fd, STDIN_FILENO);
+        -:  101:
+        1:  102:    std::cout << "Warehouse server (dynamic atoms) started on port " << port << "..." << std::endl;
+        -:  103:
+        -:  104:    // Main server loop
+        1:  105:    bool running = true;
+        9:  106:    while (running) {
+        8:  107:        read_fds = master_set;
+        -:  108:
+        -:  109:        // Use select() to wait for activity on any socket or stdin
+        8:  110:        if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
+    #####:  111:            perror("select");
+    #####:  112:            exit(1);
+        -:  113:        }
+        -:  114:
+        -:  115:        // Check each file descriptor for activity
+       43:  116:        for (int i = 0; i <= fdmax; i++) {
+       36:  117:            if (FD_ISSET(i, &read_fds)) {
+        8:  118:                if (i == listen_fd) {
+        -:  119:                    // New client connection
+        1:  120:                    sockaddr_in cli_addr{};
+        1:  121:                    socklen_t cli_len = sizeof(cli_addr);
+        1:  122:                    int new_fd = accept(listen_fd, (sockaddr*)&cli_addr, &cli_len);
+        1:  123:                    if (new_fd != -1) {
+        1:  124:                        FD_SET(new_fd, &master_set);
+        1:  125:                        if (new_fd > fdmax) fdmax = new_fd;
+        1:  126:                        std::cout << "New client connected." << std::endl;
+        -:  127:                    }
+        7:  128:                } else if (i == STDIN_FILENO) {
+        -:  129:                    // Input from keyboard
+        1:  130:                    std::string input_line;
+        1:  131:                    if (std::getline(std::cin, input_line)) {
+        1:  132:                        if (input_line == "exit") {
+        1:  133:                            std::cout << "Exit command received. Shutting down server." << std::endl;
+        1:  134:                            running = false;
+        1:  135:                            break;  // break out of the for loop
+        -:  136:                        } else {
+    #####:  137:                            std::cout << "Unknown command: " << input_line << std::endl;
+        -:  138:                        }
+        -:  139:                    } else {
+    #####:  140:                        std::cout << "Input closed. Shutting down server." << std::endl;
+    #####:  141:                        running = false;
+    #####:  142:                        break;
+        -:  143:                    }
+       1*:  144:                } else {
+        -:  145:                    // Data from existing client
+        -:  146:                    char buf[BUFFER_SIZE];
+        6:  147:                    int nbytes = recv(i, buf, sizeof(buf) - 1, 0);
+        6:  148:                    if (nbytes <= 0) {
+        -:  149:                        // Connection closed by client
+        1:  150:                        std::cout << "Client disconnected." << std::endl;
+        1:  151:                        close(i);
+        1:  152:                        FD_CLR(i, &master_set);
+        -:  153:                    } else {
+        5:  154:                        buf[nbytes] = '\0';
+        5:  155:                        process_command(std::string(buf));
+        -:  156:                    }
+        -:  157:                }
+        -:  158:            }
+        -:  159:        }
+        -:  160:    }
+        -:  161:
+        -:  162:    // Cleanup sockets on shutdown
+        1:  163:    close(listen_fd);
+        -:  164:    // Close any other sockets if you track them
+        -:  165:
+        1:  166:    std::cout << "Server has shut down gracefully." << std::endl;
+        1:  167:    return 0;
+        -:  168:}

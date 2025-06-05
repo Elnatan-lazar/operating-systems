@@ -1,0 +1,78 @@
+        -:    0:Source:supplier_molecule.cpp
+        -:    0:Graph:supplier_molecule.gcno
+        -:    0:Data:supplier_molecule.gcda
+        -:    0:Runs:1
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <sstream>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <netdb.h>
+        -:    8:#include <getopt.h>
+        -:    9:
+        -:   10:#define BUFFER_SIZE 1024
+        -:   11:
+        1:   12:int main(int argc, char *argv[]) {
+        1:   13:    std::string hostname;
+        1:   14:    std::string port_str;
+        -:   15:
+        -:   16:    int opt;
+        1:   17:    struct option long_opts[] = {
+        -:   18:            {"host", required_argument, nullptr, 'h'},
+        -:   19:            {"port", required_argument, nullptr, 'p'},
+        -:   20:            {nullptr, 0, nullptr, 0}
+        -:   21:    };
+        -:   22:
+        3:   23:    while ((opt = getopt_long(argc, argv, "h:p:", long_opts, nullptr)) != -1) {
+        2:   24:        switch (opt) {
+        1:   25:            case 'h': hostname = optarg; break;
+        1:   26:            case 'p': port_str = optarg; break;
+    #####:   27:            default:
+    #####:   28:                std::cerr << "Usage: " << argv[0] << " -h <hostname> -p <port>" << std::endl;
+    #####:   29:                return 1;
+        -:   30:        }
+        -:   31:    }
+        -:   32:
+       1*:   33:    if (hostname.empty() || port_str.empty()) {
+    #####:   34:        std::cerr << "Hostname and port are required!" << std::endl;
+    #####:   35:        return 1;
+        -:   36:    }
+        -:   37:
+        -:   38:    // getaddrinfo
+        1:   39:    struct addrinfo hints{}, *res;
+        1:   40:    hints.ai_family = AF_UNSPEC;      // IPv4 או IPv6
+        1:   41:    hints.ai_socktype = SOCK_DGRAM;   // UDP
+        -:   42:
+        1:   43:    int err = getaddrinfo(hostname.c_str(), port_str.c_str(), &hints, &res);
+        1:   44:    if (err != 0) {
+    #####:   45:        std::cerr << "getaddrinfo: " << gai_strerror(err) << std::endl;
+    #####:   46:        return 1;
+        -:   47:    }
+        -:   48:
+        1:   49:    int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        1:   50:    if (sock == -1) {
+    #####:   51:        perror("socket");
+    #####:   52:        freeaddrinfo(res);
+    #####:   53:        return 1;
+        -:   54:    }
+        -:   55:
+        1:   56:    std::string input;
+        -:   57:    while (true) {
+       10:   58:        std::cout << "Enter UDP command (or 'exit'): ";
+       10:   59:        std::getline(std::cin, input);
+       10:   60:        if (input == "exit") break;
+        -:   61:
+        9:   62:        sendto(sock, input.c_str(), input.size(), 0, res->ai_addr, res->ai_addrlen);
+        -:   63:
+        -:   64:        char buf[BUFFER_SIZE];
+        9:   65:        socklen_t serv_len = res->ai_addrlen;
+        9:   66:        int n = recvfrom(sock, buf, sizeof(buf)-1, 0, res->ai_addr, &serv_len);
+        9:   67:        buf[n] = '\0';
+        9:   68:        std::cout << "Server response: " << buf << std::endl;
+        9:   69:    }
+        -:   70:
+        1:   71:    freeaddrinfo(res);
+        1:   72:    close(sock);
+        1:   73:    return 0;
+        1:   74:}

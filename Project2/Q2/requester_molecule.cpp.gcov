@@ -1,0 +1,48 @@
+        -:    0:Source:requester_molecule.cpp
+        -:    0:Graph:requester_molecule.gcno
+        -:    0:Data:requester_molecule.gcda
+        -:    0:Runs:5
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <cstring>
+        -:    4:#include <unistd.h>
+        -:    5:#include <netdb.h>
+        -:    6:#include <arpa/inet.h>
+        -:    7:#include <sys/socket.h>
+        -:    8:
+        -:    9:#define BUFFER_SIZE 1024
+        -:   10:
+        5:   11:int main(int argc, char *argv[]) {
+        5:   12:    if (argc != 3) {
+        1:   13:        std::cerr << "Usage: " << argv[0] << " <hostname> <udp_port>" << std::endl;
+        1:   14:        return 1;
+        -:   15:    }
+        4:   16:    const char *hostname = argv[1];
+        4:   17:    int port = std::stoi(argv[2]);
+        -:   18:
+        4:   19:    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+        -:   20:
+        4:   21:    hostent *server = gethostbyname(hostname);
+        4:   22:    sockaddr_in serv_addr{};
+        4:   23:    serv_addr.sin_family = AF_INET;
+        4:   24:    bcopy(server->h_addr, &serv_addr.sin_addr.s_addr, server->h_length);
+        4:   25:    serv_addr.sin_port = htons(port);
+        -:   26:
+        4:   27:    std::string input;
+        -:   28:    while (true) {
+       10:   29:        std::cout << "Enter UDP command (or 'exit'): ";
+       10:   30:        std::getline(std::cin, input);
+       10:   31:        if (input == "exit") break;
+        -:   32:
+        6:   33:        sendto(sock, input.c_str(), input.size(), 0, (sockaddr*)&serv_addr, sizeof(serv_addr));
+        -:   34:
+        -:   35:        char buf[BUFFER_SIZE];
+        6:   36:        socklen_t serv_len = sizeof(serv_addr);
+        6:   37:        int n = recvfrom(sock, buf, sizeof(buf)-1, 0, (sockaddr*)&serv_addr, &serv_len);
+        6:   38:        buf[n] = '\0';
+        6:   39:        std::cout << "Server response: " << buf << std::endl;
+        6:   40:    }
+        -:   41:
+        4:   42:    close(sock);
+        4:   43:    return 0;
+        4:   44:}

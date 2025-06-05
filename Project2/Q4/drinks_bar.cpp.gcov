@@ -1,0 +1,278 @@
+        -:    0:Source:drinks_bar.cpp
+        -:    0:Graph:drinks_bar.gcno
+        -:    0:Data:drinks_bar.gcda
+        -:    0:Runs:2
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <sstream>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unordered_map>
+        -:    7:#include <unistd.h>
+        -:    8:#include <arpa/inet.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <sys/select.h>
+        -:   11:#include <algorithm>
+        -:   12:#include <getopt.h>
+        -:   13:#include <csignal>
+        -:   14:
+        -:   15:#define MAX_CLIENTS 100
+        -:   16:#define BUFFER_SIZE 1024
+        -:   17:
+        -:   18:std::unordered_map<std::string, unsigned long long> atom_inventory;
+        -:   19:const unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+        -:   20:
+        -:   21:int tcp_port = -1;
+        -:   22:int udp_port = -1;
+        -:   23:int timeout_sec = 0;
+        -:   24:bool running = true;
+        -:   25:
+        8:   26:void print_inventory() {
+        8:   27:    std::cout << "Inventory:" << std::endl;
+       42:   28:    for (const auto &pair : atom_inventory)
+       34:   29:        std::cout << pair.first << ": " << pair.second << std::endl;
+        8:   30:    std::cout << std::endl;
+        8:   31:}
+        -:   32:
+        6:   33:void process_tcp_command(const std::string &cmd) {
+        6:   34:    std::istringstream iss(cmd);
+        6:   35:    std::string action, atom;
+        -:   36:    unsigned long long number;
+        -:   37:
+        6:   38:    if (iss >> action >> atom >> number && action == "ADD") {
+       3*:   39:        if (atom != "CARBON" && atom != "OXYGEN" && atom != "HYDROGEN") {
+    #####:   40:            std::cerr << "Invalid atom type! Only CARBON, OXYGEN, and HYDROGEN are allowed." << std::endl;
+    #####:   41:            return;
+        -:   42:        }
+        3:   43:        if (atom_inventory[atom] + number <= MAX_ATOMS) {
+        3:   44:            atom_inventory[atom] += number;
+        -:   45:        } else {
+    #####:   46:            atom_inventory[atom] = MAX_ATOMS;
+        -:   47:        }
+        3:   48:        print_inventory();
+        -:   49:    } else {
+        3:   50:        std::cerr << "Invalid TCP command!" << std::endl;
+        -:   51:    }
+        6:   52:}
+        -:   53:
+        9:   54:bool process_udp_command(const std::string &cmd) {
+        9:   55:    std::istringstream iss(cmd);
+        9:   56:    std::string action, molecule;
+        -:   57:    unsigned long long number;
+        -:   58:
+        9:   59:    if (!(iss >> action)) {
+    #####:   60:        std::cerr << "Invalid UDP command!" << std::endl;
+    #####:   61:        return false;
+        -:   62:    }
+        -:   63:
+        9:   64:    if (action != "DELIVER") {
+        1:   65:        std::cerr << "Invalid action! need to start with DELIVER" << std::endl;
+        1:   66:        return false;
+        -:   67:    }
+        -:   68:
+        8:   69:    if (!(iss >> molecule)) {
+    #####:   70:        std::cerr << "Invalid UDP command!" << std::endl;
+    #####:   71:        return false;
+        -:   72:    }
+        -:   73:
+        8:   74:    unsigned long long needed_C=0, needed_O=0, needed_H=0;
+        8:   75:    std::string molecule_name = molecule;
+        -:   76:
+        8:   77:    if (molecule == "CARBON") {
+        1:   78:        std::string second_word;
+        1:   79:        if (!(iss >> second_word)) {
+    #####:   80:            std::cerr << "Incomplete CARBON DIOXIDE command!" << std::endl;
+    #####:   81:            return false;
+        -:   82:        }
+        1:   83:        if (second_word != "DIOXIDE") {
+    #####:   84:            std::cerr << "Invalid molecule!" << std::endl;
+    #####:   85:            return false;
+        -:   86:        }
+        1:   87:        molecule_name = "CARBON DIOXIDE";
+        1:   88:    }
+        -:   89:
+        8:   90:    if (!(iss >> number)) {
+        1:   91:        std::cerr << "Missing number!" << std::endl;
+        1:   92:        return false;
+        -:   93:    }
+        -:   94:
+        7:   95:    if (molecule_name == "WATER") {
+        2:   96:        needed_H = 2 * number;
+        2:   97:        needed_O = 1 * number;
+        5:   98:    } else if (molecule_name == "ALCOHOL") {
+        1:   99:        needed_C = 2 * number;
+        1:  100:        needed_H = 6 * number;
+        1:  101:        needed_O = 1 * number;
+        4:  102:    } else if (molecule_name == "GLUCOSE") {
+        2:  103:        needed_C = 6 * number;
+        2:  104:        needed_H = 12 * number;
+        2:  105:        needed_O = 6 * number;
+        2:  106:    } else if (molecule_name == "CARBON DIOXIDE") {
+        1:  107:        needed_C = 1 * number;
+        1:  108:        needed_O = 2 * number;
+        -:  109:    } else {
+        1:  110:        std::cerr << "Invalid molecule!" << std::endl;
+        1:  111:        return false;
+        -:  112:    }
+        -:  113:
+       12:  114:    if (atom_inventory["CARBON"] >= needed_C &&
+       23:  115:        atom_inventory["OXYGEN"] >= needed_O &&
+       11:  116:        atom_inventory["HYDROGEN"] >= needed_H) {
+        4:  117:        atom_inventory["CARBON"] -= needed_C;
+        4:  118:        atom_inventory["OXYGEN"] -= needed_O;
+        4:  119:        atom_inventory["HYDROGEN"] -= needed_H;
+        4:  120:        atom_inventory[molecule_name] += number;
+        4:  121:        print_inventory();
+        4:  122:        return true;
+        -:  123:    } else {
+        2:  124:        std::cerr << "Not enough atoms" << std::endl;
+        2:  125:        return false;
+        -:  126:    }
+        9:  127:}
+        -:  128:
+        6:  129:void process_console_command(const std::string &cmd) {
+        6:  130:    if (cmd == "EXIT"|| cmd =="exit") {
+        1:  131:        std::cout << "Shutting down server by console command." << std::endl;
+        1:  132:        running = false;
+        1:  133:        return;
+        -:  134:    }
+        -:  135:
+        5:  136:    unsigned long long water = atom_inventory["WATER"];
+        5:  137:    unsigned long long carbon_dioxide = atom_inventory["CARBON DIOXIDE"];
+        5:  138:    unsigned long long alcohol = atom_inventory["ALCOHOL"];
+        5:  139:    unsigned long long glucose = atom_inventory["GLUCOSE"];
+        -:  140:
+        5:  141:    if (cmd == "GEN SOFT DRINK") {
+        1:  142:        std::cout << "SOFT DRINKs available: " << std::min({water, carbon_dioxide, glucose}) << std::endl;
+        4:  143:    } else if (cmd == "GEN VODKA") {
+        1:  144:        std::cout << "VODKA drinks available: " << std::min({water, alcohol, glucose}) << std::endl;
+        3:  145:    } else if (cmd == "GEN CHAMPAGNE") {
+        1:  146:        std::cout << "CHAMPAGNE drinks available: " << std::min({water, carbon_dioxide, alcohol}) << std::endl;
+        -:  147:    } else {
+        2:  148:        std::cerr << "Invalid console command!" << std::endl;
+        -:  149:    }
+        -:  150:}
+        -:  151:
+    #####:  152:void handle_alarm(int sig) {
+    #####:  153:    std::cout << "No activity for " << timeout_sec << " seconds. Shutting down server." << std::endl;
+    #####:  154:    running = false;
+    #####:  155:}
+        -:  156:
+        2:  157:int main(int argc, char *argv[]) {
+        -:  158:    int opt;
+        2:  159:    struct option long_opts[] = {
+        -:  160:            {"tcp-port", required_argument, nullptr, 'T'},
+        -:  161:            {"udp-port", required_argument, nullptr, 'U'},
+        -:  162:            {"carbon", required_argument, nullptr, 'c'},
+        -:  163:            {"oxygen", required_argument, nullptr, 'o'},
+        -:  164:            {"hydrogen", required_argument, nullptr, 'h'},
+        -:  165:            {"timeout", required_argument, nullptr, 't'},
+        -:  166:            {nullptr, 0, nullptr, 0}
+        -:  167:    };
+        -:  168:
+        7:  169:    while ((opt = getopt_long(argc, argv, "T:U:c:o:h:t:", long_opts, nullptr)) != -1) {
+        5:  170:        switch (opt) {
+        1:  171:            case 'T': tcp_port = std::stoi(optarg); break;
+        1:  172:            case 'U': udp_port = std::stoi(optarg); break;
+        1:  173:            case 'c': atom_inventory["CARBON"] = std::stoull(optarg); break;
+        1:  174:            case 'o': atom_inventory["OXYGEN"] = std::stoull(optarg); break;
+        1:  175:            case 'h': atom_inventory["HYDROGEN"] = std::stoull(optarg); break;
+    #####:  176:            case 't': timeout_sec = std::stoi(optarg); break;
+    #####:  177:            default:
+    #####:  178:                std::cerr << "Usage: " << argv[0] << " -T <tcp_port> -U <udp_port> [-c <carbon>] [-o <oxygen>] [-h <hydrogen>] [-t <timeout>]" << std::endl;
+    #####:  179:                return 1;
+        -:  180:        }
+        -:  181:    }
+        -:  182:
+        2:  183:    if (tcp_port == -1 || udp_port == -1) {
+        1:  184:        std::cerr << "Error: TCP and UDP ports are mandatory." << std::endl;
+        1:  185:        return 1;
+        -:  186:    }
+        -:  187:
+        1:  188:    if (timeout_sec > 0) {
+    #####:  189:        signal(SIGALRM, handle_alarm);
+    #####:  190:        alarm(timeout_sec);
+        -:  191:    }
+        -:  192:
+        -:  193:    // TCP socket setup
+        1:  194:    int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
+        1:  195:    int optval = 1;
+        1:  196:    setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+        1:  197:    sockaddr_in tcp_addr{};
+        1:  198:    tcp_addr.sin_family = AF_INET;
+        1:  199:    tcp_addr.sin_addr.s_addr = INADDR_ANY;
+        1:  200:    tcp_addr.sin_port = htons(tcp_port);
+        1:  201:    bind(tcp_sock, (sockaddr*)&tcp_addr, sizeof(tcp_addr));
+        1:  202:    listen(tcp_sock, MAX_CLIENTS);
+        -:  203:
+        -:  204:    // UDP socket setup
+        1:  205:    int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+        1:  206:    sockaddr_in udp_addr{};
+        1:  207:    udp_addr.sin_family = AF_INET;
+        1:  208:    udp_addr.sin_addr.s_addr = INADDR_ANY;
+        1:  209:    udp_addr.sin_port = htons(udp_port);
+        1:  210:    bind(udp_sock, (sockaddr*)&udp_addr, sizeof(udp_addr));
+        -:  211:
+        -:  212:    fd_set master, read_fds;
+       17:  213:    FD_ZERO(&master);
+        1:  214:    FD_SET(tcp_sock, &master);
+        1:  215:    FD_SET(udp_sock, &master);
+        1:  216:    FD_SET(STDIN_FILENO, &master);
+        1:  217:    int fdmax = std::max({tcp_sock, udp_sock, STDIN_FILENO});
+        -:  218:
+        1:  219:    std::cout << "Drinks Bar Server started!" << std::endl;
+        1:  220:    print_inventory();
+        -:  221:
+       24:  222:    while (running) {
+       23:  223:        read_fds = master;
+       23:  224:        if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
+    #####:  225:            perror("select");
+    #####:  226:            exit(1);
+        -:  227:        }
+        -:  228:
+      23*:  229:        if (timeout_sec > 0) alarm(timeout_sec);
+        -:  230:
+      161:  231:        for (int i = 0; i <= fdmax; i++) {
+      138:  232:            if (FD_ISSET(i, &read_fds)) {
+       23:  233:                if (i == tcp_sock) {
+        1:  234:                    sockaddr_in cli_addr{};
+        1:  235:                    socklen_t cli_len = sizeof(cli_addr);
+        1:  236:                    int new_fd = accept(tcp_sock, (sockaddr*)&cli_addr, &cli_len);
+        1:  237:                    if (new_fd != -1) {
+        1:  238:                        FD_SET(new_fd, &master);
+        1:  239:                        if (new_fd > fdmax) fdmax = new_fd;
+        1:  240:                        std::cout << "New TCP client connected." << std::endl;
+        -:  241:                    }
+       22:  242:                } else if (i == udp_sock) {
+        -:  243:                    char buf[BUFFER_SIZE];
+        9:  244:                    sockaddr_in client_addr{};
+        9:  245:                    socklen_t len = sizeof(client_addr);
+        9:  246:                    int n = recvfrom(udp_sock, buf, sizeof(buf)-1, 0, (sockaddr*)&client_addr, &len);
+        9:  247:                    buf[n] = '\0';
+       18:  248:                    std::string response = process_udp_command(buf) ? "DELIVERED" : "FAILED";
+        9:  249:                    sendto(udp_sock, response.c_str(), response.size(), 0, (sockaddr*)&client_addr, len);
+       22:  250:                } else if (i == STDIN_FILENO) {
+        6:  251:                    std::string line;
+        6:  252:                    std::getline(std::cin, line);
+        6:  253:                    process_console_command(line);
+        6:  254:                } else {
+        -:  255:                    char buf[BUFFER_SIZE];
+        7:  256:                    int nbytes = recv(i, buf, sizeof(buf)-1, 0);
+        7:  257:                    if (nbytes <= 0) {
+        1:  258:                        std::cout << "TCP client disconnected." << std::endl;
+        1:  259:                        close(i);
+        1:  260:                        FD_CLR(i, &master);
+        -:  261:                    } else {
+        6:  262:                        buf[nbytes] = '\0';
+        6:  263:                        process_tcp_command(buf);
+        -:  264:                    }
+        -:  265:                }
+        -:  266:            }
+        -:  267:        }
+        -:  268:    }
+        1:  269:    std::cout << "Server shutting down." << std::endl;
+        1:  270:    close(tcp_sock);
+        1:  271:    close(udp_sock);
+        -:  272:
+        1:  273:    return 0;
+        -:  274:}

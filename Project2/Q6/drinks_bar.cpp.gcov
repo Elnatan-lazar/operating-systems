@@ -1,0 +1,519 @@
+        -:    0:Source:drinks_bar.cpp
+        -:    0:Graph:drinks_bar.gcno
+        -:    0:Data:drinks_bar.gcda
+        -:    0:Runs:4
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <sstream>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/mman.h>
+        -:    9:#include <sys/file.h>
+        -:   10:#include <sys/socket.h>
+        -:   11:#include <sys/un.h>
+        -:   12:#include <sys/select.h>
+        -:   13:#include <arpa/inet.h>
+        -:   14:#include <getopt.h>
+        -:   15:#include <csignal>
+        -:   16:#include <algorithm>
+        -:   17:
+        -:   18:#define MAX_CLIENTS 100
+        -:   19:#define BUFFER_SIZE 1024
+        -:   20:
+        -:   21:struct Inventory {
+        -:   22:    unsigned long long carbon;
+        -:   23:    unsigned long long oxygen;
+        -:   24:    unsigned long long hydrogen;
+        -:   25:    unsigned long long water;
+        -:   26:    unsigned long long carbon_dioxide;
+        -:   27:    unsigned long long alcohol;
+        -:   28:    unsigned long long glucose;
+        -:   29:};
+        -:   30:
+        -:   31:const unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+        -:   32:
+        -:   33:// גלובליים
+        -:   34:Inventory *inventory = nullptr; // מיפוי זיכרון למלאי
+        -:   35:int inventory_fd = -1;          // תיאור קובץ המלאי
+        -:   36:std::string save_file_path;
+        -:   37:
+        -:   38:int tcp_port = -1, udp_port = -1, timeout_sec = 0;
+        -:   39:std::string uds_stream_path, uds_dgram_path;
+        -:   40:
+        -:   41:// פונקציות נעילה וקבלת מפת זיכרון
+       11:   42:bool lock_inventory_file() {
+      11*:   43:    if (inventory_fd == -1) return false;
+       11:   44:    while (flock(inventory_fd, LOCK_EX) == -1) {
+    #####:   45:        if (errno != EINTR) return false;
+        -:   46:    }
+       11:   47:    return true;
+        -:   48:}
+        -:   49:
+       11:   50:void unlock_inventory_file() {
+       11:   51:    if (inventory_fd != -1) flock(inventory_fd, LOCK_UN);
+       11:   52:}
+        -:   53:
+        2:   54:bool load_inventory_from_file() {
+       2*:   55:    if (inventory_fd == -1) return false;
+       2*:   56:    if (lseek(inventory_fd, 0, SEEK_SET) == -1) return false;
+        -:   57:
+        2:   58:    ssize_t r = read(inventory_fd, inventory, sizeof(Inventory));
+        2:   59:    return r == sizeof(Inventory);
+        -:   60:}
+        -:   61:
+       11:   62:bool save_inventory_to_file() {
+      11*:   63:    if (inventory_fd == -1) return false;
+      11*:   64:    if (lseek(inventory_fd, 0, SEEK_SET) == -1) return false;
+        -:   65:
+       11:   66:    ssize_t w = write(inventory_fd, inventory, sizeof(Inventory));
+       11:   67:    fsync(inventory_fd);
+       11:   68:    return w == sizeof(Inventory);
+        -:   69:}
+        -:   70:
+       10:   71:void print_inventory() {
+       10:   72:    std::cout << "Inventory:" << std::endl;
+       10:   73:    std::cout << "CARBON: " << inventory->carbon << std::endl;
+       10:   74:    std::cout << "OXYGEN: " << inventory->oxygen << std::endl;
+       10:   75:    std::cout << "HYDROGEN: " << inventory->hydrogen << std::endl;
+       10:   76:    std::cout << "WATER: " << inventory->water << std::endl;
+       10:   77:    std::cout << "CARBON DIOXIDE: " << inventory->carbon_dioxide << std::endl;
+       10:   78:    std::cout << "ALCOHOL: " << inventory->alcohol << std::endl;
+       10:   79:    std::cout << "GLUCOSE: " << inventory->glucose << std::endl;
+       10:   80:    std::cout << std::endl;
+       10:   81:}
+        -:   82:
+    #####:   83:void handle_alarm(int sig) {
+    #####:   84:    std::cout << "No activity for " << timeout_sec << " seconds. Shutting down server." << std::endl;
+    #####:   85:    exit(0);
+        -:   86:}
+        -:   87:
+        3:   88:void update_inventory(const std::string &atom, unsigned long long number) {
+        3:   89:    if (!lock_inventory_file()) {
+    #####:   90:        std::cerr << "Failed to lock inventory file!" << std::endl;
+    #####:   91:        return;
+        -:   92:    }
+        -:   93:
+        3:   94:    if (atom == "CARBON") {
+        1:   95:        inventory->carbon = std::min(MAX_ATOMS, inventory->carbon + number);
+        2:   96:    } else if (atom == "OXYGEN") {
+        1:   97:        inventory->oxygen = std::min(MAX_ATOMS, inventory->oxygen + number);
+        1:   98:    } else if (atom == "HYDROGEN") {
+        1:   99:        inventory->hydrogen = std::min(MAX_ATOMS, inventory->hydrogen + number);
+        -:  100:    }
+        -:  101:
+        3:  102:    save_inventory_to_file();
+        3:  103:    unlock_inventory_file();
+        -:  104:}
+        -:  105:
+        5:  106:void process_tcp_command(const std::string &cmd) {
+        5:  107:    std::cout << "Received TCP command: " << cmd << std::endl;
+        5:  108:    std::istringstream iss(cmd);
+        5:  109:    std::string action, atom;
+        -:  110:    unsigned long long number;
+        5:  111:    if (iss >> action >> atom >> number && action == "ADD") {
+        4:  112:        if (atom != "CARBON" && atom != "OXYGEN" && atom != "HYDROGEN") {
+        1:  113:            std::cerr << "Invalid atom type!" << std::endl;
+        1:  114:            return;
+        -:  115:        }
+        3:  116:        update_inventory(atom, number);
+        3:  117:        print_inventory();
+        -:  118:    } else {
+        1:  119:        std::cerr << "Invalid TCP command!" << std::endl;
+        -:  120:    }
+        7:  121:}
+        -:  122:
+        7:  123:bool process_udp_command(const std::string &cmd) {
+        7:  124:    std::cout << "Received UDP command: " << cmd << std::endl;
+        7:  125:    std::istringstream iss(cmd);
+        7:  126:    std::string action, molecule;
+        -:  127:    unsigned long long number;
+        -:  128:
+        7:  129:    if (!(iss >> action >> molecule) || action != "DELIVER") {
+        1:  130:        std::cerr << "Invalid UDP command!" << std::endl;
+        1:  131:        return false;
+        -:  132:    }
+        -:  133:
+        6:  134:    unsigned long long needed_C=0, needed_O=0, needed_H=0;
+        6:  135:    std::string molecule_name = molecule;
+        -:  136:
+        6:  137:    if (molecule == "CARBON") {
+        1:  138:        std::string second_word;
+       1*:  139:        if (!(iss >> second_word) || second_word != "DIOXIDE") {
+    #####:  140:            std::cerr << "Invalid molecule! Expected 'CARBON DIOXIDE'" << std::endl;
+    #####:  141:            return false;
+        -:  142:        }
+        1:  143:        molecule_name = "CARBON DIOXIDE";
+        1:  144:    }
+        -:  145:
+        6:  146:    if (!(iss >> number)) {
+        1:  147:        std::cerr << "Missing number!" << std::endl;
+        1:  148:        return false;
+        -:  149:    }
+        -:  150:
+        5:  151:    if (molecule_name == "WATER") {
+        1:  152:        needed_H=2*number; needed_O=1*number;
+        4:  153:    } else if (molecule_name == "ALCOHOL") {
+        2:  154:        needed_C=2*number; needed_H=6*number; needed_O=1*number;
+        2:  155:    } else if (molecule_name == "GLUCOSE") {
+        1:  156:        needed_C=6*number; needed_H=12*number; needed_O=6*number;
+        1:  157:    } else if (molecule_name == "CARBON DIOXIDE") {
+        1:  158:        needed_C=1*number; needed_O=2*number;
+        -:  159:    } else {
+    #####:  160:        std::cerr << "Invalid molecule!" << std::endl;
+    #####:  161:        return false;
+        -:  162:    }
+        -:  163:
+        5:  164:    if (!lock_inventory_file()) {
+    #####:  165:        std::cerr << "Failed to lock inventory file!" << std::endl;
+    #####:  166:        return false;
+        -:  167:    }
+        -:  168:
+        5:  169:    if (inventory->carbon >= needed_C && inventory->oxygen >= needed_O && inventory->hydrogen >= needed_H) {
+        4:  170:        inventory->carbon -= needed_C;
+        4:  171:        inventory->oxygen -= needed_O;
+        4:  172:        inventory->hydrogen -= needed_H;
+        -:  173:
+        4:  174:        if (molecule_name == "WATER") inventory->water += number;
+        3:  175:        else if (molecule_name == "ALCOHOL") inventory->alcohol += number;
+        2:  176:        else if (molecule_name == "GLUCOSE") inventory->glucose += number;
+        1:  177:        else if (molecule_name == "CARBON DIOXIDE") inventory->carbon_dioxide += number;
+        -:  178:
+        4:  179:        save_inventory_to_file();
+        4:  180:        unlock_inventory_file();
+        -:  181:
+        4:  182:        print_inventory();
+        4:  183:        return true;
+        -:  184:    }
+        -:  185:
+        1:  186:    unlock_inventory_file();
+        1:  187:    std::cerr << "Not enough atoms" << std::endl;
+        1:  188:    return false;
+        7:  189:}
+        -:  190:
+    #####:  191:void process_console_command(const std::string &cmd) {
+    #####:  192:    unsigned long long w=inventory->water, c=inventory->carbon_dioxide,
+    #####:  193:            a=inventory->alcohol, g=inventory->glucose;
+    #####:  194:    if (cmd == "GEN SOFT DRINK")
+    #####:  195:        std::cout << "SOFT DRINKs: " << std::min({w, c, g}) << std::endl;
+    #####:  196:    else if (cmd == "GEN VODKA")
+    #####:  197:        std::cout << "VODKA: " << std::min({w, a, g}) << std::endl;
+    #####:  198:    else if (cmd == "GEN CHAMPAGNE")
+    #####:  199:        std::cout << "CHAMPAGNE: " << std::min({w, c, a}) << std::endl;
+        -:  200:    else
+    #####:  201:        std::cerr << "Invalid console command!" << std::endl;
+    #####:  202:}
+        -:  203:
+        4:  204:int main(int argc, char *argv[]) {
+        -:  205:    int opt;
+        4:  206:    struct option long_opts[] = {
+        -:  207:            {"tcp-port", required_argument, nullptr, 'T'},
+        -:  208:            {"udp-port", required_argument, nullptr, 'U'},
+        -:  209:            {"stream-path", required_argument, nullptr, 's'},
+        -:  210:            {"datagram-path", required_argument, nullptr, 'd'},
+        -:  211:            {"carbon", required_argument, nullptr, 'c'},
+        -:  212:            {"oxygen", required_argument, nullptr, 'o'},
+        -:  213:            {"hydrogen", required_argument, nullptr, 'h'},
+        -:  214:            {"timeout", required_argument, nullptr, 't'},
+        -:  215:            {"save-file", required_argument, nullptr, 'f'},
+        -:  216:            {nullptr, 0, nullptr, 0}
+        -:  217:    };
+        -:  218:
+        4:  219:    tcp_port = -1;
+        4:  220:    udp_port = -1;
+        4:  221:    timeout_sec = 0;
+        4:  222:    uds_stream_path.clear();
+        4:  223:    uds_dgram_path.clear();
+        4:  224:    save_file_path.clear();
+        -:  225:
+        4:  226:    unsigned long long initial_carbon = 0, initial_oxygen = 0, initial_hydrogen = 0;
+        -:  227:
+       28:  228:    while ((opt = getopt_long(argc, argv, "T:U:s:d:c:o:h:t:f:", long_opts, nullptr)) != -1) {
+       24:  229:        switch (opt) {
+        4:  230:            case 'T': tcp_port = std::stoi(optarg); break;
+        4:  231:            case 'U': udp_port = std::stoi(optarg); break;
+    #####:  232:            case 's': uds_stream_path = optarg; break;
+    #####:  233:            case 'd': uds_dgram_path = optarg; break;
+        4:  234:            case 'c': initial_carbon = std::stoull(optarg); break;
+        4:  235:            case 'o': initial_oxygen = std::stoull(optarg); break;
+        4:  236:            case 'h': initial_hydrogen = std::stoull(optarg); break;
+    #####:  237:            case 't': timeout_sec = std::stoi(optarg); break;
+        4:  238:            case 'f': save_file_path = optarg; break;
+    #####:  239:            default:
+        -:  240:                std::cerr << "Usage error: " << argv[0]
+        -:  241:                          << " [-T tcp_port] [-U udp_port] [-s uds_stream_path] [-d uds_dgram_path]"
+    #####:  242:                          << " [-c carbon] [-o oxygen] [-h hydrogen] [-t timeout] [-f save_file]" << std::endl;
+    #####:  243:                return 1;
+        -:  244:        }
+        -:  245:    }
+        -:  246:
+        -:  247:    // בדיקות התנגשויות בין TCP ו-UDS stream
+       4*:  248:    if (tcp_port != -1 && !uds_stream_path.empty()) {
+    #####:  249:        std::cerr << "Error: Cannot specify both TCP port (-T) and UNIX stream socket (-s)." << std::endl;
+    #####:  250:        return 1;
+        -:  251:    }
+        -:  252:    // בדיקות התנגשויות בין UDP ו-UDS datagram
+       4*:  253:    if (udp_port != -1 && !uds_dgram_path.empty()) {
+    #####:  254:        std::cerr << "Error: Cannot specify both UDP port (-U) and UNIX datagram socket (-d)." << std::endl;
+    #####:  255:        return 1;
+        -:  256:    }
+        -:  257:    // חייב להיות לפחות TCP או uds stream
+       4*:  258:    if (tcp_port == -1 && uds_stream_path.empty()) {
+    #####:  259:        std::cerr << "Error: Must specify TCP port (-T) or UNIX stream socket (-s)." << std::endl;
+    #####:  260:        return 1;
+        -:  261:    }
+        -:  262:    // חייב להיות לפחות UDP או uds datagram
+       4*:  263:    if (udp_port == -1 && uds_dgram_path.empty()) {
+    #####:  264:        std::cerr << "Error: Must specify UDP port (-U) or UNIX datagram socket (-d)." << std::endl;
+    #####:  265:        return 1;
+        -:  266:    }
+        -:  267:
+        4:  268:    if (!save_file_path.empty()) {
+        -:  269:        // פותח/יוצר את קובץ המלאי
+        4:  270:        inventory_fd = open(save_file_path.c_str(), O_RDWR | O_CREAT, 0666);
+        4:  271:        if (inventory_fd == -1) {
+        1:  272:            perror("open inventory file");
+        1:  273:            return 1;
+        -:  274:        }
+        -:  275:
+        -:  276:        // נעילה כדי למנוע גישה בו זמנית בעייתית
+        3:  277:        if (!lock_inventory_file()) {
+    #####:  278:            std::cerr << "Failed to lock inventory file for initialization" << std::endl;
+    #####:  279:            close(inventory_fd);
+    #####:  280:            return 1;
+        -:  281:        }
+        -:  282:
+        -:  283:        // מיפוי הזיכרון של הקובץ (או יצירת מלאי חדש)
+        3:  284:        off_t size = lseek(inventory_fd, 0, SEEK_END);
+        3:  285:        if (size == sizeof(Inventory)) {
+        -:  286:            // קובץ מלאי קיים - טוען את המלאי
+        2:  287:            inventory = (Inventory*)mmap(nullptr, sizeof(Inventory), PROT_READ | PROT_WRITE, MAP_SHARED, inventory_fd, 0);
+        2:  288:            if (inventory == MAP_FAILED) {
+    #####:  289:                perror("mmap");
+    #####:  290:                unlock_inventory_file();
+    #####:  291:                close(inventory_fd);
+    #####:  292:                return 1;
+        -:  293:            }
+        -:  294:
+        2:  295:            if (!load_inventory_from_file()) {
+    #####:  296:                std::cerr << "Failed to load inventory from file!" << std::endl;
+    #####:  297:                unlock_inventory_file();
+    #####:  298:                munmap(inventory, sizeof(Inventory));
+    #####:  299:                close(inventory_fd);
+    #####:  300:                return 1;
+        -:  301:            }
+        -:  302:        } else {
+        -:  303:            // מאתחל מלאי חדש עם ערכים ראשוניים
+        1:  304:            if (ftruncate(inventory_fd, sizeof(Inventory)) == -1) {
+    #####:  305:                perror("ftruncate");
+    #####:  306:                unlock_inventory_file();
+    #####:  307:                close(inventory_fd);
+    #####:  308:                return 1;
+        -:  309:            }
+        1:  310:            inventory = (Inventory*)mmap(nullptr, sizeof(Inventory), PROT_READ | PROT_WRITE, MAP_SHARED, inventory_fd, 0);
+        1:  311:            if (inventory == MAP_FAILED) {
+    #####:  312:                perror("mmap");
+    #####:  313:                unlock_inventory_file();
+    #####:  314:                close(inventory_fd);
+    #####:  315:                return 1;
+        -:  316:            }
+        1:  317:            inventory->carbon = initial_carbon;
+        1:  318:            inventory->oxygen = initial_oxygen;
+        1:  319:            inventory->hydrogen = initial_hydrogen;
+        1:  320:            inventory->water = 0;
+        1:  321:            inventory->carbon_dioxide = 0;
+        1:  322:            inventory->alcohol = 0;
+        1:  323:            inventory->glucose = 0;
+        -:  324:
+        1:  325:            if (!save_inventory_to_file()) {
+    #####:  326:                std::cerr << "Failed to initialize inventory file!" << std::endl;
+    #####:  327:                unlock_inventory_file();
+    #####:  328:                munmap(inventory, sizeof(Inventory));
+    #####:  329:                close(inventory_fd);
+    #####:  330:                return 1;
+        -:  331:            }
+        -:  332:        }
+        -:  333:
+        3:  334:        unlock_inventory_file();
+        -:  335:    } else {
+        -:  336:        // אם לא שומרים לקובץ - משתמשים במלאי בזיכרון רגיל
+        -:  337:        static Inventory local_inventory;
+    #####:  338:        inventory = &local_inventory;
+    #####:  339:        inventory->carbon = initial_carbon;
+    #####:  340:        inventory->oxygen = initial_oxygen;
+    #####:  341:        inventory->hydrogen = initial_hydrogen;
+    #####:  342:        inventory->water = 0;
+    #####:  343:        inventory->carbon_dioxide = 0;
+    #####:  344:        inventory->alcohol = 0;
+    #####:  345:        inventory->glucose = 0;
+        -:  346:    }
+        -:  347:
+        -:  348:    // יצירת sockets לפי ההגדרות
+        3:  349:    int tcp_sock = -1;
+        3:  350:    if (tcp_port != -1) {
+        3:  351:        tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
+        3:  352:        int optval = 1;
+        3:  353:        setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+        3:  354:        sockaddr_in addr{};
+        3:  355:        addr.sin_family = AF_INET;
+        3:  356:        addr.sin_addr.s_addr = INADDR_ANY;
+        3:  357:        addr.sin_port = htons(tcp_port);
+        3:  358:        if (bind(tcp_sock, (sockaddr*)&addr, sizeof(addr)) == -1) {
+    #####:  359:            perror("bind tcp");
+    #####:  360:            exit(1);
+        -:  361:        }
+        3:  362:        if (listen(tcp_sock, MAX_CLIENTS) == -1) {
+    #####:  363:            perror("listen tcp");
+    #####:  364:            exit(1);
+        -:  365:        }
+        3:  366:        std::cout << "TCP socket listening on port " << tcp_port << std::endl;
+        -:  367:    }
+        -:  368:
+        3:  369:    int udp_sock = -1;
+        3:  370:    if (udp_port != -1) {
+        3:  371:        udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+        3:  372:        sockaddr_in addr{};
+        3:  373:        addr.sin_family = AF_INET;
+        3:  374:        addr.sin_addr.s_addr = INADDR_ANY;
+        3:  375:        addr.sin_port = htons(udp_port);
+        3:  376:        if (bind(udp_sock, (sockaddr*)&addr, sizeof(addr)) == -1) {
+    #####:  377:            perror("bind udp");
+    #####:  378:            exit(1);
+        -:  379:        }
+        3:  380:        std::cout << "UDP socket listening on port " << udp_port << std::endl;
+        -:  381:    }
+        -:  382:
+        3:  383:    int uds_stream_sock = -1;
+        3:  384:    if (!uds_stream_path.empty()) {
+    #####:  385:        unlink(uds_stream_path.c_str());
+    #####:  386:        uds_stream_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    #####:  387:        sockaddr_un addr{};
+    #####:  388:        addr.sun_family = AF_UNIX;
+    #####:  389:        strncpy(addr.sun_path, uds_stream_path.c_str(), sizeof(addr.sun_path) - 1);
+    #####:  390:        addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+    #####:  391:        if (bind(uds_stream_sock, (sockaddr*)&addr, sizeof(addr)) == -1) {
+    #####:  392:            perror("bind uds_stream");
+    #####:  393:            exit(1);
+        -:  394:        }
+    #####:  395:        if (listen(uds_stream_sock, MAX_CLIENTS) == -1) {
+    #####:  396:            perror("listen uds_stream");
+    #####:  397:            exit(1);
+        -:  398:        }
+    #####:  399:        std::cout << "UNIX stream socket created at: " << uds_stream_path << std::endl;
+        -:  400:    }
+        -:  401:
+        3:  402:    int uds_dgram_sock = -1;
+        3:  403:    if (!uds_dgram_path.empty()) {
+    #####:  404:        unlink(uds_dgram_path.c_str());
+    #####:  405:        uds_dgram_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    #####:  406:        sockaddr_un addr{};
+    #####:  407:        addr.sun_family = AF_UNIX;
+    #####:  408:        strncpy(addr.sun_path, uds_dgram_path.c_str(), sizeof(addr.sun_path) - 1);
+    #####:  409:        addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+    #####:  410:        if (bind(uds_dgram_sock, (sockaddr*)&addr, sizeof(addr)) == -1) {
+    #####:  411:            perror("bind uds_dgram");
+    #####:  412:            exit(1);
+        -:  413:        }
+    #####:  414:        std::cout << "UNIX datagram socket created at: " << uds_dgram_path << std::endl;
+        -:  415:    }
+        -:  416:
+        -:  417:    fd_set master, read_fds;
+       51:  418:    FD_ZERO(&master);
+        3:  419:    if (tcp_sock != -1) FD_SET(tcp_sock, &master);
+        3:  420:    if (udp_sock != -1) FD_SET(udp_sock, &master);
+       3*:  421:    if (uds_stream_sock != -1) FD_SET(uds_stream_sock, &master);
+       3*:  422:    if (uds_dgram_sock != -1) FD_SET(uds_dgram_sock, &master);
+        3:  423:    FD_SET(STDIN_FILENO, &master);
+        3:  424:    int fdmax = std::max({tcp_sock, udp_sock, uds_stream_sock, uds_dgram_sock, STDIN_FILENO});
+        -:  425:
+        3:  426:    std::cout << "Server started!" << std::endl;
+        3:  427:    print_inventory();
+        -:  428:
+        -:  429:    while (true) {
+       19:  430:        read_fds = master;
+       19:  431:        if (select(fdmax + 1, &read_fds, nullptr, nullptr, nullptr) == -1) {
+    #####:  432:            perror("select");
+    #####:  433:            exit(1);
+        -:  434:        }
+      19*:  435:        if (timeout_sec > 0) alarm(timeout_sec);
+        -:  436:
+      124:  437:        for (int i = 0; i <= fdmax; i++) {
+      108:  438:            if (FD_ISSET(i, &read_fds)) {
+        -:  439:                // UDS Datagram
+       19:  440:                if (i == uds_dgram_sock) {
+        -:  441:                    char buf[BUFFER_SIZE];
+    #####:  442:                    sockaddr_un cli_addr{};
+    #####:  443:                    socklen_t len = sizeof(cli_addr);
+    #####:  444:                    int n = recvfrom(i, buf, sizeof(buf) - 1, 0, (sockaddr*)&cli_addr, &len);
+    #####:  445:                    buf[n] = '\0';
+    #####:  446:                    bool success = process_udp_command(buf);
+    #####:  447:                    std::string r = success ? "DELIVERED" : "FAILED";
+    #####:  448:                    sendto(i, r.c_str(), r.size(), 0, (sockaddr*)&cli_addr, len);
+    #####:  449:                }
+        -:  450:                    // UDP
+       19:  451:                else if (i == udp_sock) {
+        -:  452:                    char buf[BUFFER_SIZE];
+        7:  453:                    sockaddr_in cli_addr{};
+        7:  454:                    socklen_t len = sizeof(cli_addr);
+        7:  455:                    int n = recvfrom(i, buf, sizeof(buf) - 1, 0, (sockaddr*)&cli_addr, &len);
+        7:  456:                    buf[n] = '\0';
+        7:  457:                    bool success = process_udp_command(buf);
+        7:  458:                    std::string r = success ? "DELIVERED" : "FAILED";
+        7:  459:                    sendto(i, r.c_str(), r.size(), 0, (sockaddr*)&cli_addr, len);
+        7:  460:                }
+        -:  461:                    // UDS Stream & TCP (accept)
+       12:  462:                else if (i == uds_stream_sock || i == tcp_sock) {
+        2:  463:                    sockaddr_storage cli_addr{};
+        2:  464:                    socklen_t len = sizeof(cli_addr);
+        2:  465:                    int new_fd = accept(i, (sockaddr*)&cli_addr, &len);
+        2:  466:                    if (new_fd != -1) {
+        2:  467:                        FD_SET(new_fd, &master);
+        2:  468:                        if (new_fd > fdmax) fdmax = new_fd;
+        2:  469:                        std::cout << "New client connected (fd: " << new_fd << ")" << std::endl;
+        -:  470:                    }
+        2:  471:                }
+        -:  472:                    // STDIN
+       10:  473:                else if (i == STDIN_FILENO) {
+        3:  474:                    std::string line;
+        3:  475:                    std::getline(std::cin, line);
+       3*:  476:                    if(line =="EXIT"|| line == "exit") {
+        3:  477:                        std::cout << "Exit command received. Shutting down server." << std::endl;
+        -:  478:
+        3:  479:                        if (inventory != nullptr) save_inventory_to_file();
+        3:  480:                        exit(0);
+        -:  481:                    }
+    #####:  482:                    else if (line == "PRINT") {
+    #####:  483:                        print_inventory();
+        -:  484:                    }
+        -:  485:                    else
+    #####:  486:                    process_console_command(line);
+    #####:  487:                }
+        -:  488:                    // TCP/UDS Stream data
+        -:  489:                else {
+        -:  490:                    char buf[BUFFER_SIZE];
+        7:  491:                    int n = recv(i, buf, sizeof(buf) - 1, 0);
+        7:  492:                    if (n <= 0) {
+        2:  493:                        close(i);
+        2:  494:                        FD_CLR(i, &master);
+        -:  495:                    } else {
+        5:  496:                        buf[n] = '\0';
+        5:  497:                        process_tcp_command(buf);
+        -:  498:                    }
+        -:  499:                }
+        -:  500:            }
+        -:  501:        }
+        -:  502:
+       16:  503:    }
+        -:  504:
+        -:  505:    if (inventory != nullptr) {
+        -:  506:        munmap(inventory, sizeof(Inventory));
+        -:  507:        inventory = nullptr;
+        -:  508:    }
+        -:  509:    if (inventory_fd != -1) {
+        -:  510:        close(inventory_fd);
+        -:  511:        inventory_fd = -1;
+        -:  512:    }
+        -:  513:
+        -:  514:    return 0;
+        -:  515:}

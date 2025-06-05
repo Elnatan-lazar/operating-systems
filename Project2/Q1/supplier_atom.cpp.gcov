@@ -1,0 +1,64 @@
+        -:    0:Source:supplier_atom.cpp
+        -:    0:Graph:supplier_atom.gcno
+        -:    0:Data:supplier_atom.gcda
+        -:    0:Runs:1
+        -:    1:#include <iostream>
+        -:    2:#include <string>
+        -:    3:#include <cstring>
+        -:    4:#include <unistd.h>
+        -:    5:#include <netdb.h>
+        -:    6:
+        -:    7:/**
+        -:    8: * The main function establishes a TCP connection to the server and
+        -:    9: * allows the user to input commands to send to the server.
+        -:   10: */
+        1:   11:int main(int argc, char *argv[]) {
+        -:   12:    // Validate command-line arguments
+        1:   13:    if (argc != 3) {
+    #####:   14:        std::cerr << "Usage: " << argv[0] << " <hostname> <port>" << std::endl;
+    #####:   15:        return 1;
+        -:   16:    }
+        1:   17:    const char *hostname = argv[1];
+        1:   18:    int port = std::stoi(argv[2]);
+        -:   19:
+        -:   20:    // Create a TCP socket
+        1:   21:    int sock = socket(AF_INET, SOCK_STREAM, 0);
+        1:   22:    if (sock < 0) {
+    #####:   23:        perror("socket");
+    #####:   24:        return 1;
+        -:   25:    }
+        -:   26:
+        -:   27:    // Resolve the hostname to an IP address
+        1:   28:    hostent *server = gethostbyname(hostname);
+        1:   29:    if (server == nullptr) {
+    #####:   30:        std::cerr << "ERROR: No such host." << std::endl;
+    #####:   31:        return 1;
+        -:   32:    }
+        -:   33:
+        -:   34:    // Set up the server address structure
+        1:   35:    sockaddr_in serv_addr{};
+        1:   36:    serv_addr.sin_family = AF_INET;
+        1:   37:    bcopy(server->h_addr, &serv_addr.sin_addr.s_addr, server->h_length);
+        1:   38:    serv_addr.sin_port = htons(port);
+        -:   39:
+        -:   40:    // Connect to the server
+        1:   41:    if (connect(sock, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+    #####:   42:        perror("connect");
+    #####:   43:        return 1;
+        -:   44:    }
+        -:   45:
+        1:   46:    std::cout << "Connected to warehouse_atom server at " << hostname << ":" << port << std::endl;
+        -:   47:
+        -:   48:    // User input loop
+        1:   49:    std::string input;
+        -:   50:    while (true) {
+        6:   51:        std::cout << "Enter command (or 'exit' to quit): ";
+        6:   52:        std::getline(std::cin, input);
+        6:   53:        if (input == "exit") break;
+        5:   54:        send(sock, input.c_str(), input.size(), 0);
+        -:   55:    }
+        -:   56:
+        1:   57:    close(sock);
+        1:   58:    std::cout << "Connection closed." << std::endl;
+        1:   59:    return 0;
+        1:   60:}
