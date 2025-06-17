@@ -1,29 +1,22 @@
 CC = gcc
-CFLAGS = -Wall -std=c99 -fPIC
-LDFLAGS = -lm -lmandelbrot
-LIB_NAME = libmandelbrot.so
-LIB_OBJ = mandelbrot.o
-TARGET = main
+CFLAGS = -Wall -fPIC
+LDFLAGS = -shared
+TARGET_LIB = libmandelbrot.so
+HEADER = mandelbrot.h
 
-.PHONY: all clean run
+all: dynamic test_runner
 
-all: $(LIB_NAME) $(TARGET)
+# יצירת ספריה דינמית
+dynamic: mandelbrot.o
+	$(CC) $(LDFLAGS) -o $(TARGET_LIB) mandelbrot.o
 
-# Compile mandelbrot.o with -fPIC for shared lib
-$(LIB_OBJ): mandelbrot.c mandelbrot.h
-	$(CC) $(CFLAGS) -c mandelbrot.c -o $(LIB_OBJ)
+mandelbrot.o: mandelbrot.c $(HEADER)
+	$(CC) $(CFLAGS) -c mandelbrot.c
 
-# Create shared object
-$(LIB_NAME): $(LIB_OBJ)
-	$(CC) -shared -o $(LIB_NAME) $(LIB_OBJ)
+# תוכנית שמשתמשת בספריה
+test_runner: main.c $(HEADER)
+	$(CC) -o test_runner main.c -L. -lmandelbrot -lm
 
-# Compile main program and link with shared lib
-$(TARGET): main.c mandelbrot.h
-	$(CC) -Wall -std=c99 -o $(TARGET) main.c -L. -lmandelbrot -lm
-
-run: all
-	LD_LIBRARY_PATH=. ./$(TARGET)
-
-
+# ניקוי
 clean:
-	rm -f *.o *.so $(TARGET)
+	rm -f *.o *.so test_runner

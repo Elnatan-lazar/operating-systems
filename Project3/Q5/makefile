@@ -1,12 +1,15 @@
 CXX       = g++
 CXXFLAGS  = -Wall -std=c++11 -pthread
-TARGET    = example_main
-SRC       = reactor.cpp example_main.cpp
+LIB       = libreactor.a
+OBJS      = reactor.o
 
-all: $(TARGET)
+all: $(LIB)
 
-$(TARGET): $(SRC) reactor.h
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
+reactor.o: reactor.cpp reactor.h
+	$(CXX) $(CXXFLAGS) -c reactor.cpp
+
+$(LIB): $(OBJS)
+	ar rcs $(LIB) $(OBJS)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(OBJS) $(LIB)
