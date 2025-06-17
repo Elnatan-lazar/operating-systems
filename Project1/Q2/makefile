@@ -10,9 +10,9 @@ TARGET = main
 SRC = main.c
 
 # Build target
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)
+main: main.c
+	$(CC) $(CFLAGS) -o main main.c $(LDFLAGS)
 
 # Clean build files
 clean:
-	rm -f $(TARGET)
+	rm -f main
