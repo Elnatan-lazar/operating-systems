@@ -203,4 +203,4 @@ clean:
 
 ## 👤 Author
 
-> Elnatan, OS Course 2024, Ariel University
+> Elnatan & Noa, OS Course 2024, Ariel University
