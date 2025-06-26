@@ -1,0 +1,54 @@
+
+===========================
+  Server + Client Guide
+===========================
+
+📁 Structure:
+-------------
+Q5/          --> Contains reactor library (reactor.cpp/.h)
+Q6/          --> Contains server_reactor.cpp and Makefile
+
+===========================
+🛠 Step-by-step Instructions
+===========================
+
+1. ✅ Build the reactor library
+------------------------------
+cd Q5
+make
+
+2. ✅ Build and run the server
+------------------------------
+cd ../Q6
+make
+./server_reactor
+
+You should see:
+  Server running on port 9034...
+
+3. ✅ Connect from a client terminal
+-----------------------------------
+In another terminal:
+nc localhost 9034
+
+This opens a text-based connection to the server.
+
+4. ✅ Example client commands
+-----------------------------
+Newgraph 3
+1,1
+2,2
+2,0
+CH
+Newpoint 3,3
+Removepoint 1,1
+EXIT
+
+===========================
+📌 Notes
+===========================
+
+- The graph is shared between all clients.
+- Commands are case-sensitive.
+- Each client gets help text upon connection.
+- EXIT will disconnect the current client.
