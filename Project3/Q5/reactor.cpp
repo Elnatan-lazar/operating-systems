@@ -7,6 +7,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 #include <algorithm>
+#include <cstdio>
 
 struct Reactor {
     std::vector<int> fds;
