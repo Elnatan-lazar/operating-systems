@@ -36,8 +36,7 @@ Project3/
 **What:** Reads points from stdin, computes convex hull and prints area.  
 **Run:**  
 ```bash
-g++ -std=c++11 -o ch ch.cpp
-./ch
+./convex_hull
 ```
 
 ---
@@ -47,8 +46,7 @@ g++ -std=c++11 -o ch ch.cpp
 **What:** Similar to Q1, but accepts a file with 2D points.  
 **Run:**  
 ```bash
-g++ -std=c++11 -o ch_file ch_file.cpp
-./ch_file input.txt
+./ch_profile
 ```
 
 ---
@@ -63,7 +61,6 @@ g++ -std=c++11 -o ch_file ch_file.cpp
 
 **Run:**  
 ```bash
-g++ -std=c++11 -o ch_interactive ch_interactive.cpp
 ./ch_interactive
 ```
 
@@ -74,7 +71,6 @@ g++ -std=c++11 -o ch_interactive ch_interactive.cpp
 **What:** Multi-client TCP server, shared graph between all clients.  
 **Run:**  
 ```bash
-g++ -std=c++11 -pthread -o server server.cpp
 ./server
 ```
 
