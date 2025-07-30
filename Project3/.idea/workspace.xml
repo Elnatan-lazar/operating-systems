@@ -13,7 +13,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="abb351e2-3065-43d2-9a9d-12a40ec65440" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/Q6/server_reactor.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Q6/server_reactor.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Final_Project/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../Final_Project/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Q5/libreactor.a" beforeDir="false" afterPath="$PROJECT_DIR$/Q5/libreactor.a" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Q8/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Q8/Makefile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Q9/makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Q9/makefile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Q9/server_proactor.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Q9/server_proactor.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -26,21 +31,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Elnatan-lazar"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Elnatan-lazar&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Elnatan-lazar/operating-systems.git",
-    "accountId": "ac76cdf5-ce94-4f4f-94dc-9acec2366227"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Elnatan-lazar/operating-systems.git&quot;,
+    &quot;accountId&quot;: &quot;ac76cdf5-ce94-4f4f-94dc-9acec2366227&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="30aPzrLbU22SLDY4xFFcIn3fZKD" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -51,6 +56,7 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
@@ -72,10 +78,22 @@
       <option name="presentableId" value="Default" />
       <updated>1753862975777</updated>
       <workItem from="1753862977244" duration="4830000" />
+      <workItem from="1753871888131" duration="4012000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
 </project>

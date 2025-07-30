@@ -13,9 +13,7 @@
     <option name="reloaded" value="true" />
   </component>
   <component name="CMakeRunConfigurationManager">
-    <generated>
-      <config projectName="Final_Project" targetName="graph_app" />
-    </generated>
+    <generated />
   </component>
   <component name="CMakeSettings">
     <configurations>
@@ -128,7 +126,7 @@
       <option name="presentableId" value="Default" />
       <updated>1753170038718</updated>
       <workItem from="1753170040057" duration="6724000" />
-      <workItem from="1753862925417" duration="1923000" />
+      <workItem from="1753862925417" duration="3322000" />
     </task>
     <task id="LOCAL-00001" summary="starting final project">
       <option name="closed" value="true" />

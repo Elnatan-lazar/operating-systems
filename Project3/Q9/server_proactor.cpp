@@ -1,4 +1,3 @@
-
 #include "../Q8/proactor.h"
 #include <iostream>
 #include <sstream>
@@ -168,7 +167,6 @@ void* handleClient(int fd) {
             }
         }
     }
-    return nullptr;
 }
 
 int main() {
@@ -183,7 +181,7 @@ int main() {
     bind(lfd, (sockaddr*)&addr, sizeof(addr));
     listen(lfd, 10);
 
-    std::cout << "Proactor server running on port 9034...\n";
+    std::cout << "Server (proactor) running on port 9034...\n";
 
     pthread_t tid = startProactor(lfd, handleClient);
     pthread_join(tid, nullptr);

@@ -1,10 +1,14 @@
-CXX = g++
-CXXFLAGS = -Wall -std=c++11 -pthread -I../Q8
+CXX       = g++
+CXXFLAGS  = -Wall -std=c++11 -pthread
+TARGET    = server_proactor
 
-all: server_proactor
+INCLUDES  = -I../Q8
+LIBS      = -L../Q5 -lreactor
 
-server_proactor: server_proactor.cpp ../Q8/proactor.cpp
-	$(CXX) $(CXXFLAGS) -o $@ server_proactor.cpp ../Q8/proactor.cpp
+all: $(TARGET)
+
+$(TARGET): server_proactor.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(LIBS) -o $@
 
 clean:
-	rm -f server_proactor
+	rm -f $(TARGET)

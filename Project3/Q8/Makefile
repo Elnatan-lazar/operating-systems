@@ -1,14 +1,15 @@
+CXX       = g++
+CXXFLAGS  = -Wall -std=c++11 -pthread
+LIB_PATH  = ../Q5/libreactor.a
+PROACTOR_OBJ = proactor.o
 
-CXX = g++
-CXXFLAGS = -Wall -std=c++11 -pthread
+all: $(LIB_PATH)
 
-all: libproactor.a
-
-libproactor.a: proactor.o
+$(LIB_PATH): $(PROACTOR_OBJ)
 	ar rcs $@ $^
 
-proactor.o: proactor.cpp proactor.h
+proactor.o: proactor.cpp ../Q5/reactor.h
 	$(CXX) $(CXXFLAGS) -c proactor.cpp
 
 clean:
-	rm -f *.o *.a
+	rm -f *.o
