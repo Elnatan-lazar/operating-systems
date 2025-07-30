@@ -16,6 +16,10 @@ static std::vector<Point> graph;
 static std::unordered_map<int, int> statePts;
 static void* reactor = nullptr;
 
+// דגלים להגנה על פעולות מקביליות
+static bool isGraphBusy = false;
+static int currentOpFd = -1;
+
 bool parsePoint(const std::string& s, Point& out) {
     std::string cleaned;
     for (char c : s) if (c != ' ' && c != '\n' && c != '\r') cleaned += c;
@@ -84,6 +88,13 @@ void* clientHandler(int fd) {
         std::cout << "Client " << fd << " sent command: " << line << std::endl;
 
         if (statePts[fd] > 0) {
+            if (isGraphBusy && currentOpFd != fd) {
+                sendStr(fd, "Another operation is in progress. Please wait.\n");
+                continue;
+            }
+            isGraphBusy = true;
+            currentOpFd = fd;
+
             Point p;
             if (parsePoint(line, p)) {
                 graph.push_back(p);
@@ -94,6 +105,9 @@ void* clientHandler(int fd) {
             } else {
                 sendStr(fd, "Bad format, use x,y\n");
             }
+
+            isGraphBusy = false;
+            currentOpFd = -1;
             continue;
         }
 
@@ -108,6 +122,13 @@ void* clientHandler(int fd) {
             close(fd);
             return nullptr;
         } else if (cmd == "Newgraph") {
+            if (isGraphBusy && currentOpFd != fd) {
+                sendStr(fd, "Another operation is in progress. Please wait.\n");
+                continue;
+            }
+            isGraphBusy = true;
+            currentOpFd = fd;
+
             int n;
             if (cmdin >> n) {
                 graph.clear();
@@ -117,7 +138,17 @@ void* clientHandler(int fd) {
             } else {
                 sendStr(fd, "Usage: Newgraph n\n");
             }
+
+            isGraphBusy = false;
+            currentOpFd = -1;
         } else if (cmd == "Newpoint") {
+            if (isGraphBusy && currentOpFd != fd) {
+                sendStr(fd, "Another operation is in progress. Please wait.\n");
+                continue;
+            }
+            isGraphBusy = true;
+            currentOpFd = fd;
+
             std::string rest;
             std::getline(cmdin, rest);
             Point p;
@@ -128,7 +159,17 @@ void* clientHandler(int fd) {
             } else {
                 sendStr(fd, "Bad format.\n");
             }
+
+            isGraphBusy = false;
+            currentOpFd = -1;
         } else if (cmd == "Removepoint") {
+            if (isGraphBusy && currentOpFd != fd) {
+                sendStr(fd, "Another operation is in progress. Please wait.\n");
+                continue;
+            }
+            isGraphBusy = true;
+            currentOpFd = fd;
+
             std::string rest;
             std::getline(cmdin, rest);
             Point p;
@@ -146,7 +187,17 @@ void* clientHandler(int fd) {
             } else {
                 sendStr(fd, "Bad format.\n");
             }
+
+            isGraphBusy = false;
+            currentOpFd = -1;
         } else if (cmd == "CH") {
+            if (isGraphBusy && currentOpFd != fd) {
+                sendStr(fd, "Another operation is in progress. Please wait.\n");
+                continue;
+            }
+            isGraphBusy = true;
+            currentOpFd = fd;
+
             auto hull = computeConvexHull(graph);
             double area = computeArea(hull);
             std::ostringstream out;
@@ -154,6 +205,9 @@ void* clientHandler(int fd) {
                 << "Convex hull area: " << area << "\n";
             sendStr(fd, out.str());
             std::cout << "Client " << fd << " computed CH. Area = " << area << std::endl;
+
+            isGraphBusy = false;
+            currentOpFd = -1;
         } else {
             sendStr(fd, "Unknown command.\n" + helpText());
         }
