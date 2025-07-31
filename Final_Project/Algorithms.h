@@ -1,23 +1,27 @@
+// Algorithms.h
+
 #ifndef ALGORITHMS_H
 #define ALGORITHMS_H
 
 #include "Graph.h"
 #include <vector>
 
-// Check if an undirected graph has an Eulerian circuit.
-// Returns true if every non-zero-degree vertex is connected
-// and all vertices have even degree.
+// ===== existing Eulerian =====
 bool hasEulerianCircuit(const Graph& g);
-
-// Compute the Eulerian circuit of an undirected graph.
-// If no circuit exists, returns an empty vector.
-// Otherwise returns the sequence of vertices in order.
 std::vector<int> getEulerianCircuit(const Graph& g);
 
-// → כאן תוכל להוסיף בעתיד פונקציות נוספות, למשל:
-// bool hasHamiltonianCircuit(const Graph& g);
-// std::vector<int> getHamiltonianCircuit(const Graph& g);
-// int computeMST(const Graph& g);
-// וכו׳…
+// ===== new algorithms =====
+
+// 1) Compute MST total weight in an unweighted graph (unit weights = 1)
+int computeMST(const Graph& g);
+
+// 2) Strongly Connected Components (Kosaraju)
+std::vector<std::vector<int>> getSCCs(const Graph& g);
+
+// 3) Maximum flow from s to t (Edmonds–Karp, unit capacities)
+int maxFlow(const Graph& g, int s, int t);
+
+// 4) Hamiltonian circuit via backtracking (returns empty if none)
+std::vector<int> getHamiltonianCircuit(const Graph& g);
 
 #endif // ALGORITHMS_H

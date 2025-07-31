@@ -1,6 +1,9 @@
+// main.cpp (מעודכן – מריץ את כל האלגוריתמים)
+
 #include "Graph.h"
 #include "Algorithms.h"
 #include <iostream>
+#include <vector>
 
 int main(int argc, char* argv[]) {
     if (argc < 3 || ((argc - 2) % 2 != 0)) {
@@ -21,15 +24,43 @@ int main(int argc, char* argv[]) {
     std::cout << "Adjacency list:\n";
     g.print();
 
+    // 1) Eulerian
     if (hasEulerianCircuit(g)) {
-        auto circuit = getEulerianCircuit(g);
+        auto circ = getEulerianCircuit(g);
         std::cout << "Eulerian Circuit:\n";
-        for (int v : circuit) {
-            std::cout << v << " ";
-        }
+        for (int v : circ) std::cout << v << " ";
         std::cout << "\n";
     } else {
         std::cout << "No Eulerian Circuit exists.\n";
     }
+
+    // 2) MST
+    std::cout << computeMST(g) << " = MST total weight\n";
+
+    // 3) SCC
+    auto sccs = getSCCs(g);
+    std::cout << "SCCs:\n";
+    for (auto& comp : sccs) {
+        std::cout << "  [";
+        for (size_t i = 0; i < comp.size(); ++i) {
+            std::cout << comp[i] << (i+1 < comp.size() ? ", " : "");
+        }
+        std::cout << "]\n";
+    }
+
+    // 4) Max flow 0->V-1
+    int flow = maxFlow(g, 0, V-1);
+    std::cout << "Max Flow (0->" << V-1 << "): " << flow << "\n";
+
+    // 5) Hamiltonian
+    auto ham = getHamiltonianCircuit(g);
+    if (ham.empty()) {
+        std::cout << "No Hamiltonian Circuit exists.\n";
+    } else {
+        std::cout << "Hamiltonian Circuit:\n";
+        for (int v : ham) std::cout << v << " ";
+        std::cout << "\n";
+    }
+
     return 0;
 }
