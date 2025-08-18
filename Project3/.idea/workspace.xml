@@ -12,14 +12,7 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="abb351e2-3065-43d2-9a9d-12a40ec65440" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../Final_Project/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../Final_Project/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Q5/libreactor.a" beforeDir="false" afterPath="$PROJECT_DIR$/Q5/libreactor.a" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Q8/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Q8/Makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Q9/makefile" beforeDir="false" afterPath="$PROJECT_DIR$/Q9/makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Q9/server_proactor.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Q9/server_proactor.cpp" afterDir="false" />
-    </list>
+    <list default="true" id="abb351e2-3065-43d2-9a9d-12a40ec65440" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -78,7 +71,7 @@
       <option name="presentableId" value="Default" />
       <updated>1753862975777</updated>
       <workItem from="1753862977244" duration="4830000" />
-      <workItem from="1753871888131" duration="4012000" />
+      <workItem from="1753871888131" duration="4591000" />
     </task>
     <servers />
   </component>

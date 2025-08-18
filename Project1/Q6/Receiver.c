@@ -7,11 +7,13 @@ volatile sig_atomic_t bit_index = 0;
 volatile sig_atomic_t received = 0;
 
 void handle_sigusr1(int sig) {
+    (void)sig;
     bits[bit_index++] = 0;
     if (bit_index == 8) received = 1;
 }
 
 void handle_sigusr2(int sig) {
+    (void)sig;
     bits[bit_index++] = 1;
     if (bit_index == 8) received = 1;
 }

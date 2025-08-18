@@ -2,11 +2,11 @@ Flat profile:
 
 Each sample counts as 0.01 seconds.
   %   cumulative   self              self     total           
- time   seconds   seconds    calls  ms/call  ms/call  name    
-100.00      0.44     0.44        1   440.00   440.00  max_subarray_sum_n3
-  0.00      0.44     0.00        1     0.00     0.00  generate_random_array
-  0.00      0.44     0.00        1     0.00     0.00  max_subarray_sum_n
-  0.00      0.44     0.00        1     0.00     0.00  max_subarray_sum_n2
+ time   seconds   seconds    calls   s/call   s/call  name    
+100.00      1.44     1.44        1     1.44     1.44  max_subarray_sum_n3
+  0.00      1.44     0.00        1     0.00     0.00  generate_random_array
+  0.00      1.44     0.00        1     0.00     0.00  max_subarray_sum_n
+  0.00      1.44     0.00        1     0.00     0.00  max_subarray_sum_n2
 
  %         the percentage of the total running time of the
 time       program used by this function.
@@ -44,15 +44,15 @@ notice and this notice are preserved.
 		     Call graph (explanation follows)
 
 
-granularity: each sample hit covers 4 byte(s) for 2.27% of 0.44 seconds
+granularity: each sample hit covers 4 byte(s) for 0.69% of 1.44 seconds
 
 index % time    self  children    called     name
-                0.44    0.00       1/1           main [2]
-[1]    100.0    0.44    0.00       1         max_subarray_sum_n3 [1]
+                1.44    0.00       1/1           main [2]
+[1]    100.0    1.44    0.00       1         max_subarray_sum_n3 [1]
 -----------------------------------------------
                                                  <spontaneous>
-[2]    100.0    0.00    0.44                 main [2]
-                0.44    0.00       1/1           max_subarray_sum_n3 [1]
+[2]    100.0    0.00    1.44                 main [2]
+                1.44    0.00       1/1           max_subarray_sum_n3 [1]
                 0.00    0.00       1/1           generate_random_array [3]
                 0.00    0.00       1/1           max_subarray_sum_n2 [5]
                 0.00    0.00       1/1           max_subarray_sum_n [4]

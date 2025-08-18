@@ -1,29 +1,15 @@
-# Makefile
-
 CC = gcc
-CFLAGS = -Wall -g
-
+CFLAGS = -g
 all: StackOverflow DivisionByZero InvalidMemory
 
 StackOverflow: StackOverflow.c
-	$(CC) $(CFLAGS) StackOverflow.c -o StackOverflow
+	$(CC) $(CFLAGS) -o StackOverflow StackOverflow.c
 
 DivisionByZero: DivisionByZero.c
-	$(CC) $(CFLAGS) DivisionByZero.c -o DivisionByZero
+	$(CC) $(CFLAGS) -o DivisionByZero DivisionByZero.c
 
 InvalidMemory: InvalidMemory.c
-	$(CC) $(CFLAGS) InvalidMemory.c -o InvalidMemory
-
-run-stack:
-	./StackOverflow
-
-run-zero:
-	./DivisionByZero
-
-run-invalid:
-	./InvalidMemory
-
-.PHONY: all clean run-stack run-zero run-invalid
+	$(CC) $(CFLAGS) -o InvalidMemory InvalidMemory.c
 
 clean:
-	rm -f StackOverflow DivisionByZero InvalidMemory
+	rm -f StackOverflow DivisionByZero InvalidMemory core.*
