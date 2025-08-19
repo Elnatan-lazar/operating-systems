@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
     fd_set master_set, read_fds;
     FD_ZERO(&master_set);
     FD_SET(listen_fd, &master_set);
-    FD_SET(STDIN_FILENO, &master_set);  // <-- Add stdin here
+    FD_SET(STDIN_FILENO, &master_set);
     int fdmax = std::max(listen_fd, STDIN_FILENO);
 
     std::cout << "Warehouse server (dynamic atoms) started on port " << port << "..." << std::endl;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        // Check each file descriptor for activity
+        // Check each fd for activity
         for (int i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds)) {
                 if (i == listen_fd) {
@@ -161,7 +161,6 @@ int main(int argc, char *argv[]) {
 
     // Cleanup sockets on shutdown
     close(listen_fd);
-    // Close any other sockets if you track them
 
     std::cout << "Server has shut down gracefully." << std::endl;
     return 0;
