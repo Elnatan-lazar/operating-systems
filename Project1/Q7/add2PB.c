@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#define PHONEBOOK_FILE "phonebook.txt"
+#define PHONEBOOK "phonebook.txt"
 
 int main(int argc, char *argv[]) {
     if (argc < 4) {
@@ -12,18 +12,18 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int fd = open(PHONEBOOK_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    int fd = open(PHONEBOOK, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd < 0) {
         perror("open");
         return 1;
     }
 
-    // Find the index of the comma
+    // Find the index of the comma (,)
     int comma_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], ",") == 0) {
             comma_index = i;
-            break;
+            break; // There is only one
         }
     }
 
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < comma_index; i++) {
         write(fd, argv[i], strlen(argv[i]));
         if (i != comma_index - 1) {
-            write(fd, " ", 1);
+            write(fd, " ", 1); // For secnd or last name
         }
     }
 
@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
     write(fd, ",", 1);
     write(fd, argv[comma_index + 1], strlen(argv[comma_index + 1]));
     write(fd, "\n", 1);
+    // <name...>,<phoneNumber>\n
 
     close(fd);
     return 0;

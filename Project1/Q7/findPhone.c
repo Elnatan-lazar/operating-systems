@@ -4,7 +4,7 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#define PHONEBOOK_FILE "phonebook.txt"
+#define PHONEBOOK "phonebook.txt"
 
 void error_and_exit(const char *msg) {
     perror(msg);
@@ -29,8 +29,7 @@ int main(int argc, char *argv[]) {
         dup2(pipe1[1], STDOUT_FILENO);
         close(pipe1[1]);
 
-        char *grep_args[] = {"grep", NULL, PHONEBOOK_FILE, NULL};
-        grep_args[1] = argv[1];
+        char *grep_args[] = {"grep", argv[1], PHONEBOOK, NULL};
         execvp("grep", grep_args);
         error_and_exit("execvp grep");
     }
@@ -38,7 +37,7 @@ int main(int argc, char *argv[]) {
     pid_t pid2 = fork();
     if (pid2 < 0) error_and_exit("fork2");
 
-    if (pid2 == 0) { // Child 2 - sed + awk
+    if (pid2 == 0) { // Child 2 - sed ' ' to '#'
         close(pipe1[1]);
         dup2(pipe1[0], STDIN_FILENO);
         close(pipe1[0]);
@@ -54,7 +53,7 @@ int main(int argc, char *argv[]) {
     pid_t pid3 = fork();
     if (pid3 < 0) error_and_exit("fork3");
 
-    if (pid3 == 0) { // Child 3 - sed ',' to ' '
+    if (pid3 == 0) { // Child 3 - sed + awk
         close(pipe1[0]);
         close(pipe1[1]);
         close(pipe2[1]);
@@ -67,7 +66,7 @@ int main(int argc, char *argv[]) {
         pid_t pid4 = fork();
         if (pid4 < 0) error_and_exit("fork4");
 
-        if (pid4 == 0) { // Child 4 - second sed
+        if (pid4 == 0) { // Child 4 - sed ',' to ' '
             close(pipe3[0]);
             dup2(pipe3[1], STDOUT_FILENO);
             close(pipe3[1]);
