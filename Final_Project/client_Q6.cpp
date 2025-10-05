@@ -53,7 +53,7 @@ int main() {
         while ((n = read(sock_fd, buffer, sizeof(buffer)-1)) > 0) {
             buffer[n] = '\0';
             std::cout << buffer;
-            if (n < sizeof(buffer)-1) break;
+            if (static_cast<size_t>(n) < sizeof(buffer) - 1) break;
             if (buffer[n-1] == '\n') break;
         }
     };

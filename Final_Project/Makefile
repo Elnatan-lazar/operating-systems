@@ -7,8 +7,8 @@ CXXFLAGS  := -std=c++17 -Wall -Wextra -I. -pthread
 # ==============================================================================
 # Targets (executables)
 # ==============================================================================
-TARGET       := graph_app        # Q1-2: Graph + Euler
-RANDOM_TARGET:= random_app       # Q3: Random graph
+TARGET       := graph            # Q1-2: Graph + Euler
+RANDOM_TARGET:= random           # Q3: Random graph
 SERVER6      := server_Q6        # Q6: Server - Euler
 CLIENT6      := client_Q6
 SERVER7      := server_Q7        # Q7: Server - 4 algorithms + Factory/Strategy
@@ -42,13 +42,13 @@ SERVER9_OBJS:= $(SERVER9_SRC:.cpp=.o)
 # Default arguments
 # ==============================================================================
 RUN_ARGS        ?= 3 0 1 1 2 2 0
-RUN_RANDOM_ARGS ?= -v 5 -e 7 -s 12345
+RUN_RANDOM_ARGS ?= -v 5 -e 10 -s 12345
 
 .PHONY: all clean clear \
         run run_random \
         run_server6 run_server7 run_server8 run_server9 \
         coverage_basic coverage_full report_basic report_full \
-        profile memcheck callgrind helgrind memcheck_adv callgrind_adv
+        profile memcheck callgrind helgrind_all memcheck_all callgrind_all
 
 # ==============================================================================
 # Build all object files first (optional)
@@ -84,16 +84,16 @@ run_random: $(RANDOM_TARGET)
 # Q4: Coverage + Profiling + Valgrind (basic code)
 # ==============================================================================
 # make coverage_basic
-# ./graph_app_cov 3 0 1 1 2 2 0
+# ./graph_cov 3 0 1 1 2 2 0
 # make report_basic
 # (make open_report_basic)
 # make profile
 # make memcheck
 # make callgrind
 coverage_basic: CXXFLAGS += --coverage
-coverage_basic: clean graph_app_cov
+coverage_basic: clean graph_cov
 
-graph_app_cov: $(OBJS)
+graph_cov: $(OBJS)
 	@echo "=== Building coverage binary ($(TARGET)_cov) ==="
 	@$(CXX) $(CXXFLAGS) -o $@ $^
 
@@ -198,7 +198,7 @@ memcheck_all: $(SERVER6) $(SERVER7) $(SERVER8) $(SERVER9)
 	valgrind --leak-check=full ./$(SERVER8)
 	valgrind --leak-check=full ./$(SERVER9)
 
-callgrind_adv: $(SERVER6) $(SERVER7) $(SERVER8) $(SERVER9)
+callgrind_all: $(SERVER6) $(SERVER7) $(SERVER8) $(SERVER9)
 	@echo "=== Valgrind callgrind for all servers ==="
 	valgrind --tool=callgrind ./$(SERVER6)
 	valgrind --tool=callgrind ./$(SERVER7)
@@ -213,21 +213,52 @@ helgrind_all: $(SERVER6) $(SERVER7) $(SERVER8) $(SERVER9)
 	valgrind --tool=helgrind ./$(SERVER9)
 
 # ==============================================================================
-# Q11: Full coverage (including servers)
+# Q11: Full coverage (servers)
 # ==============================================================================
 # make coverage_full
-# ./graph_app_fullcov 3 0 1 1 2 2 0
 # make report_full
-coverage_full: CXXFLAGS += --coverage
-coverage_full: clean graph_app_fullcov
+COV_FLAGS = --coverage
 
-graph_app_fullcov: $(OBJS) $(SERVER6_OBJS) $(SERVER7_OBJS) $(SERVER8_OBJS) $(SERVER9_OBJS)
-	@echo "=== Building full coverage binary (graph_app_fullcov) ==="
-	@$(CXX) $(CXXFLAGS) -o $@ $^
+coverage_full: CXXFLAGS += $(COV_FLAGS)
+coverage_full: clean server6_cov server7_cov server8_cov server9_cov
+
+server6_cov: $(SERVER6) $(CLIENT6)
+	@echo "=== [COVERAGE] Running Q6 server & client ==="
+	(./$(SERVER6) & pid=$$!; sleep 1; \
+	 echo "CREATE undirected 5 3 (0,1) (1,2) (2,0)\nQ" | ./$(CLIENT6); \
+	 wait $$pid)
+
+server7_cov: $(SERVER7) $(CLIENT7)
+	@echo "=== [COVERAGE] Running Q7 server & client ==="
+	(./$(SERVER7) & pid=$$!; sleep 1; \
+	 echo "RANDOM directed 4 6 23232\nQ" | ./$(CLIENT7); \
+	 wait $$pid)
+
+server8_cov: $(SERVER8) $(CLIENT8)
+	@echo "=== [COVERAGE] Running Q8 server & client ==="
+	(./$(SERVER8) & pid=$$!; sleep 1; \
+	 echo "CREATE directed 6 5 (0,1) (1,2) (2,3) (3,4) (4,5)\nQ" | ./$(CLIENT8); \
+	 wait $$pid)
+
+server9_cov: $(SERVER9) $(CLIENT9)
+	@echo "=== [COVERAGE] Running Q9 server & client ==="
+	(./$(SERVER9) & pid=$$!; sleep 1; \
+	 echo "RANDOM undirected 5 8 12345\nQ" | ./$(CLIENT9); \
+	 wait $$pid)
 
 report_full:
-	@gcov Graph.cpp Algorithms.cpp main.cpp \
-	      server_Q6.cpp server_Q7.cpp server_Q8.cpp server_Q9.cpp
+	@echo "=== COVERAGE REPORT ==="
+	@total=0; count=0; \
+	for f in Graph.cpp Algorithms.cpp server_Q6.cpp server_Q7.cpp server_Q8.cpp server_Q9.cpp; do \
+	    echo ">>> $$f <<<"; \
+	    percent=$$(gcov -n $$f | grep "Lines executed" | head -n 1 | sed 's/.*: *\([0-9.]*%\).*/\1/'); \
+	    if [ -z "$$percent" ]; then \
+	        echo "No coverage info"; \
+	    else \
+	        echo "Coverage: $$percent"; \
+	    fi; \
+	    echo; \
+	done
 
 # ==============================================================================
 # Clean and clear
@@ -238,8 +269,9 @@ clean:
 	       $(SERVER7) $(CLIENT7) \
 	       $(SERVER8) $(CLIENT8) \
 	       $(SERVER9) $(CLIENT9) \
-	       $(TARGET)_cov graph_app_fullcov \
-	       *.gcno *.gcda *.gcov gmon.out profile_report.txt
+	       $(TARGET)_cov graph_cov graph_fullcov \
+	       *.gcno *.gcda *.gcov gmon.out profile_report.txt \
+		   callgrind.out.*
 
 clear: clean
 	@rm -f *.txt

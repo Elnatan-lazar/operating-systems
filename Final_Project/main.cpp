@@ -1,4 +1,4 @@
-// main.cpp (מעודכן – מריץ את כל האלגוריתמים)
+// main.cpp
 
 #include "Graph.h"
 #include "Algorithms.h"
@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 2) MST
-    std::cout << computeMST(g) << " = MST total weight\n";
+    std::cout << "MST total weight = " << computeMST(g) << std::endl;
 
     // 3) SCC
     auto sccs = getSCCs(g);

@@ -24,9 +24,9 @@ public:
     const std::vector<std::vector<int>>& getAdjList() const;
 
 private:
-    int V;                                  // number of vertices
+    int V;                                 // number of vertices
     bool directed;                         // directed vs. undirected
-    std::vector<std::vector<int>> adjList; // adjacency lists
+    std::vector<std::vector<int>> adjList; // adjacency list
 };
 
 #endif // GRAPH_H

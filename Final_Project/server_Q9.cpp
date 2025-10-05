@@ -20,12 +20,14 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <cerrno>
 
 constexpr int PORT = 8080;
 std::atomic<bool> server_running(true);  // flag for server shutdown
 
 std::mutex clients_mutex;             
-std::set<int> client_fds; 
+std::set<int> client_fds;
+std::mutex cout_mutex; 
 
 // Utility: trim whitespace
 static std::string trim(const std::string& s) {
@@ -66,10 +68,8 @@ public:
     }
     // shutdown the queue
     void stop() {
-        {
-            std::lock_guard<std::mutex> lk(m);
-            stopped = true;
-        }
+        std::lock_guard<std::mutex> lk(m);
+        stopped = true;
         cv.notify_all();
     }
 
@@ -112,7 +112,10 @@ void clientHandler(int client) {
     getpeername(client, (sockaddr*)&peer, &len);
     inet_ntop(AF_INET, &peer.sin_addr, peer_ip, sizeof(peer_ip));
     int peer_port = ntohs(peer.sin_port);
-    std::cout << "[+] Client connected: " << peer_ip << ":" << peer_port << "\n";
+    {
+        std::lock_guard<std::mutex> lk(cout_mutex);
+        std::cout << "[+] Client connected: " << peer_ip << ":" << peer_port << "\n";
+    }
 
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
@@ -169,7 +172,10 @@ void clientHandler(int client) {
         client_fds.erase(client);
     }
     close(client);
-    std::cout << "[-] Client disconnected: " << peer_ip << ":" << peer_port << "\n";
+    {
+        std::lock_guard<std::mutex> lk(cout_mutex);
+        std::cout << "[-] Client disconnected: " << peer_ip << ":" << peer_port << "\n";
+    }
 }
 
 void acceptLoop(int sock) {
@@ -178,8 +184,12 @@ void acceptLoop(int sock) {
         socklen_t len = sizeof(peer);
         int client = accept(sock, (sockaddr*)&peer, &len);
         if (client < 0) {
-            if (!server_running || errno == EBADF) break; 
-            perror("accept");
+            int e = errno;
+            if (!server_running || e == EBADF || e == ENOTSOCK) break;
+            {
+                std::lock_guard<std::mutex> lk(cout_mutex);
+                perror("accept");
+            }
             continue;
         }
         std::thread(clientHandler, client).detach();
@@ -370,7 +380,10 @@ int main() {
     if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0) { perror("bind"); return 1; }
     if (listen(sock, SOMAXCONN) < 0) { perror("listen"); return 1; }
 
-    std::cout << "Server listening on port " << PORT << "\n";
+    {
+        std::lock_guard<std::mutex> lk(cout_mutex);
+        std::cout << "Server listening on port " << PORT << "\n";
+    }
 
     // Start threads
     std::vector<std::thread> pool;
@@ -414,6 +427,10 @@ int main() {
         if (t.joinable()) t.join();
     }
 
-    std::cout << "Server terminated.\n";
+    {
+        std::lock_guard<std::mutex> lk(cout_mutex);
+        std::cout << "Server terminated.\n";
+    }
+
     return 0;
 }
