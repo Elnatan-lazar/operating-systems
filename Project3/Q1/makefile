@@ -1,3 +1,6 @@
+# make run-console --> run with input from cmd
+# make run-file --> run with input from the file "input.txt"
+
 CXX = g++
 CXXFLAGS = -Wall -std=c++11
 TARGET = convex_hull

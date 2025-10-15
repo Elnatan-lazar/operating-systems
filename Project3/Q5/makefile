@@ -1,3 +1,5 @@
+# make
+
 CXX       = g++
 CXXFLAGS  = -Wall -std=c++11 -pthread
 LIB       = libreactor.a

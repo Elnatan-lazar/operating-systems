@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -10,12 +9,17 @@
 #include <iomanip>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <atomic>
 
 struct Point { double x, y; };
 std::vector<Point> graph;
 std::unordered_map<int, int> statePts;
+std::unordered_map<int, int> clientIds;
 std::mutex graphMutex;
+std::atomic<bool> serverRunning{true};
 int graphOwnerFd = -1;
+int nextClientId = 1;
 
 bool parsePoint(const std::string& s, Point& out) {
     std::string cleaned;
@@ -30,7 +34,12 @@ void sendStr(int fd, const std::string& msg) {
 }
 
 std::string helpText() {
-    return "Commands:\nNewgraph n\nNewpoint x,y\nRemovepoint x,y\nCH\nEXIT\n";
+    return "Valid commands:\n"
+           "  Newgraph n      - create a new graph and enter n points\n"
+           "  Newpoint x,y    - add a new point\n"
+           "  Removepoint x,y - remove a point\n"
+           "  CH              - compute convex hull and print area\n"
+           "  EXIT            - disconnect from server\n";
 }
 
 double cross(const Point& O, const Point& A, const Point& B) {
@@ -68,6 +77,7 @@ double computeArea(const std::vector<Point>& poly) {
 }
 
 void handleClient(int fd) {
+    int clientId = clientIds[fd];
     sendStr(fd, helpText());
     statePts[fd] = 0;
     char buf[512];
@@ -75,7 +85,7 @@ void handleClient(int fd) {
     while (true) {
         ssize_t n = recv(fd, buf, sizeof(buf)-1, 0);
         if (n <= 0) {
-            std::cout << "Client " << fd << " disconnected.\n";
+            std::cout << "Client " << clientId << " disconnected.\n";
             std::lock_guard<std::mutex> lock(graphMutex);
             if (graphOwnerFd == fd) graphOwnerFd = -1;
             close(fd);
@@ -85,7 +95,7 @@ void handleClient(int fd) {
         std::istringstream iss(buf);
         std::string line;
         while (std::getline(iss, line)) {
-            std::cout << "Client " << fd << " sent: " << line << "\n";
+            std::cout << "Client " << clientId << " sent: " << line << "\n";
 
             std::lock_guard<std::mutex> lock(graphMutex);
 
@@ -171,24 +181,100 @@ void handleClient(int fd) {
 
 int main() {
     int lfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd < 0) {
+        perror("socket");
+        return 1;
+    }
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(9034);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     int opt = 1;
-    setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    bind(lfd, (sockaddr*)&addr, sizeof(addr));
-    listen(lfd, 10);
+    if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(lfd);
+        return 1;
+    }
+
+    if (bind(lfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(lfd);
+        return 1;
+    }
+    if (listen(lfd, 10) < 0) {
+        perror("listen");
+        close(lfd);
+        return 1;
+    }
 
     std::cout << "Threaded server running on port 9034...\n";
 
-    while (true) {
-        int client = accept(lfd, nullptr, nullptr);
-        if (client >= 0) {
-            std::cout << "Client connected: " << client << std::endl;
-            std::thread t(handleClient, client);
-            t.detach();
+    while (serverRunning.load()) {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+
+        FD_SET(lfd, &readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+
+        int maxfd = std::max(lfd, STDIN_FILENO);
+
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        int ready = select(maxfd + 1, &readfds, nullptr, nullptr, &tv);
+        if (ready < 0) {
+            perror("select");
+            break;
+        }
+
+        if (FD_ISSET(STDIN_FILENO, &readfds)) {
+            std::string line;
+            if (!std::getline(std::cin, line)) {
+                std::cout << "EOF on stdin, shutting down server...\n";
+                serverRunning.store(false);
+                close(lfd);
+                break;
+            }
+            if (line == "EXIT" || line == "exit") {
+                std::cout << "Server EXIT command received, shutting down...\n";
+                serverRunning.store(false);
+                close(lfd);
+                break;
+            }
+        }
+
+        if (FD_ISSET(lfd, &readfds)) {
+            sockaddr_in client_addr{};
+            socklen_t client_len = sizeof(client_addr);
+            int client = accept(lfd, (sockaddr*)&client_addr, &client_len);
+            if (client >= 0) {
+                std::lock_guard<std::mutex> lock(graphMutex);
+                int id = nextClientId++;
+                clientIds[client] = id;
+                std::cout << "Client " << id << " connected\n";
+                std::thread t(handleClient, client);
+                t.detach();
+            } else {
+                perror("accept");
+            }
         }
     }
+
+    {
+        std::lock_guard<std::mutex> lock(graphMutex);
+        for (auto &p : clientIds) {
+            int fd = p.first;
+            if (fd >= 0) {
+                close(fd);
+            }
+        }
+        clientIds.clear();
+    }
+
+    std::cout << "Server shutdown complete.\n";
+    return 0;
 }
+

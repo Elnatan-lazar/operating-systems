@@ -10,12 +10,17 @@
 #include <iomanip>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <atomic>
 
 struct Point { double x, y; };
 std::vector<Point> graph;
 std::unordered_map<int, int> statePts;
+std::unordered_map<int, int> clientIds;
 std::mutex graphMutex;
+std::atomic<bool> serverRunning{true};
 int graphOwnerFd = -1;
+int nextClientId = 1;
 
 bool parsePoint(const std::string& s, Point& out) {
     std::string cleaned;
@@ -30,7 +35,12 @@ void sendStr(int fd, const std::string& msg) {
 }
 
 std::string helpText() {
-    return "Commands:\nNewgraph n\nNewpoint x,y\nRemovepoint x,y\nCH\nEXIT\n";
+    return "Valid commands:\n"
+           "  Newgraph n      - create a new graph and enter n points\n"
+           "  Newpoint x,y    - add a new point\n"
+           "  Removepoint x,y - remove a point\n"
+           "  CH              - compute convex hull and print area\n"
+           "  EXIT            - disconnect from server\n";
 }
 
 double cross(const Point& O, const Point& A, const Point& B) {
@@ -68,6 +78,11 @@ double computeArea(const std::vector<Point>& poly) {
 }
 
 void* handleClient(int fd) {
+    if (clientIds.find(fd) == clientIds.end()) {
+        clientIds[fd] = nextClientId++;
+    }
+    int clientId = clientIds[fd];
+
     sendStr(fd, helpText());
     statePts[fd] = 0;
     char buf[512];
@@ -75,7 +90,7 @@ void* handleClient(int fd) {
     while (true) {
         ssize_t n = recv(fd, buf, sizeof(buf)-1, 0);
         if (n <= 0) {
-            std::cout << "Client " << fd << " disconnected.\n";
+            std::cout << "Client " << clientId << " disconnected.\n";
             std::lock_guard<std::mutex> lock(graphMutex);
             if (graphOwnerFd == fd) graphOwnerFd = -1;
             close(fd);
@@ -85,7 +100,7 @@ void* handleClient(int fd) {
         std::istringstream iss(buf);
         std::string line;
         while (std::getline(iss, line)) {
-            std::cout << "Client " << fd << " sent: " << line << "\n";
+            std::cout << "Client " << clientId << " sent: " << line << "\n";
 
             std::lock_guard<std::mutex> lock(graphMutex);
 
@@ -115,6 +130,7 @@ void* handleClient(int fd) {
 
             if (cmd == "EXIT") {
                 sendStr(fd, "Goodbye.\n");
+                std::cout << "Client " << clientId << " disconnected.\n";
                 if (graphOwnerFd == fd) graphOwnerFd = -1;
                 close(fd);
                 return nullptr;
@@ -171,20 +187,62 @@ void* handleClient(int fd) {
 
 int main() {
     int lfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd < 0) {
+        perror("socket");
+        return 1;
+    }
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(9034);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     int opt = 1;
-    setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    bind(lfd, (sockaddr*)&addr, sizeof(addr));
-    listen(lfd, 10);
+    if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(lfd);
+        return 1;
+    }
+
+    if (bind(lfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(lfd);
+        return 1;
+    }
+    if (listen(lfd, 10) < 0) {
+        perror("listen");
+        close(lfd);
+        return 1;
+    }
 
     std::cout << "Server (proactor) running on port 9034...\n";
-
     pthread_t tid = startProactor(lfd, handleClient);
-    pthread_join(tid, nullptr);
 
+    std::string line;
+    while (true) {
+        if (!std::getline(std::cin, line)) {
+            std::cout << "EOF on stdin, shutting down server...\n";
+            break;
+        }
+        if (line == "EXIT" || line == "exit") {
+            std::cout << "Server EXIT command received, shutting down...\n";
+            break;
+        }
+    }
+
+    stopProactor(tid);
+    close(lfd);
+    {
+        std::lock_guard<std::mutex> lock(graphMutex);
+        for (auto &p : clientIds) {
+            int fd = p.first;
+            if (fd >= 0) {
+                close(fd);
+            }
+        }
+        clientIds.clear();
+    }
+
+    std::cout << "Server shutdown complete.\n";
     return 0;
 }

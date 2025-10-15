@@ -107,6 +107,6 @@ int main() {
     out << "Convex Hull with list: " << elapsed2.count() << " seconds\n";
 
     out.close();
-    std::cout << "✅ Timing results written to 'timing_results.txt'\n";
+    std::cout << "Timing results written to 'timing_results.txt'\n";
     return 0;
 }

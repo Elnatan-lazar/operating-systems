@@ -16,7 +16,6 @@ static std::vector<Point> graph;
 static std::unordered_map<int, int> statePts;
 static void* reactor = nullptr;
 
-// דגלים להגנה על פעולות מקביליות
 static bool isGraphBusy = false;
 static int currentOpFd = -1;
 
@@ -117,7 +116,7 @@ void* clientHandler(int fd) {
 
         if (cmd == "EXIT") {
             sendStr(fd, "Goodbye.\n");
-            std::cout << "Client " << fd << " requested EXIT.\n";
+            std::cout << "Client " << fd << " disconnected.\n";
             removeFdFromReactor(reactor, fd);
             close(fd);
             return nullptr;

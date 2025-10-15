@@ -23,6 +23,7 @@ void* proactorMainLoop(void* args) {
     while (running.load()) {
         int clientfd = accept(listenfd, nullptr, nullptr);
         if (clientfd >= 0) {
+            std::cout << "Client connected." << std::endl;
             std::thread t(threadFunc, clientfd);
             t.detach();
         }

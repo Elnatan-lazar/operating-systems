@@ -10,20 +10,21 @@
 #include <iomanip>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <arpa/inet.h>
-
+#include <sys/select.h>
+#include <atomic>
 
 struct Point { double x, y; };
 std::vector<Point> graph;
 std::unordered_map<int, int> statePts;
+std::unordered_map<int, int> clientIds;
 std::mutex graphMutex;
+std::atomic<bool> serverRunning{true};
 int graphOwnerFd = -1;
-
-pthread_mutex_t areaMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t areaCond = PTHREAD_COND_INITIALIZER;
-double lastArea = 0.0;
-bool alreadyAnnounced = false;
+int nextClientId = 1;
+// Producer–Consumer variables
+pthread_mutex_t ch_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t ch_cond = PTHREAD_COND_INITIALIZER;
+bool wasAbove100 = false; 
 
 bool parsePoint(const std::string& s, Point& out) {
     std::string cleaned;
@@ -38,7 +39,12 @@ void sendStr(int fd, const std::string& msg) {
 }
 
 std::string helpText() {
-    return "Commands:\nNewgraph n\nNewpoint x,y\nRemovepoint x,y\nCH\nEXIT\n\n";
+    return "Valid commands:\n"
+           "  Newgraph n      - create a new graph and enter n points\n"
+           "  Newpoint x,y    - add a new point\n"
+           "  Removepoint x,y - remove a point\n"
+           "  CH              - compute convex hull and print area\n"
+           "  EXIT            - disconnect from server\n";
 }
 
 double cross(const Point& O, const Point& A, const Point& B) {
@@ -76,7 +82,11 @@ double computeArea(const std::vector<Point>& poly) {
 }
 
 void* handleClient(int fd) {
-    std::cout << "[Client " << fd << "] connected." << std::endl;
+    if (clientIds.find(fd) == clientIds.end()) {
+        clientIds[fd] = nextClientId++;
+    }
+    int clientId = clientIds[fd];
+
     sendStr(fd, helpText());
     statePts[fd] = 0;
     char buf[512];
@@ -84,7 +94,7 @@ void* handleClient(int fd) {
     while (true) {
         ssize_t n = recv(fd, buf, sizeof(buf)-1, 0);
         if (n <= 0) {
-            std::cout << "[Client " << fd << "] disconnected." << std::endl;
+            std::cout << "Client " << clientId << " disconnected.\n";
             std::lock_guard<std::mutex> lock(graphMutex);
             if (graphOwnerFd == fd) graphOwnerFd = -1;
             close(fd);
@@ -94,8 +104,9 @@ void* handleClient(int fd) {
         std::istringstream iss(buf);
         std::string line;
         while (std::getline(iss, line)) {
+            std::cout << "Client " << clientId << " sent: " << line << "\n";
+
             std::lock_guard<std::mutex> lock(graphMutex);
-            std::cout << "[Client " << fd << "] command received: " << line << std::endl;
 
             if (graphOwnerFd != -1 && graphOwnerFd != fd) {
                 sendStr(fd, "Another client is currently creating the graph. Please wait.\n");
@@ -106,14 +117,12 @@ void* handleClient(int fd) {
                 Point p;
                 if (parsePoint(line, p)) {
                     graph.push_back(p);
-                    std::cout << "[Client " << fd << "] point added: " << p.x << "," << p.y << std::endl;
                     sendStr(fd, "Point added.\n");
                     if (--statePts[fd] == 0) {
                         sendStr(fd, "Graph input complete.\n");
                         graphOwnerFd = -1;
                     }
                 } else {
-                    std::cout << "[Client " << fd << "] failed to parse point: " << line << std::endl;
                     sendStr(fd, "Bad format, use x,y\n");
                 }
                 continue;
@@ -124,8 +133,8 @@ void* handleClient(int fd) {
             cmdin >> cmd;
 
             if (cmd == "EXIT") {
-                std::cout << "[Client " << fd << "] exiting." << std::endl;
                 sendStr(fd, "Goodbye.\n");
+                std::cout << "Client " << clientId << " disconnected.\n";
                 if (graphOwnerFd == fd) graphOwnerFd = -1;
                 close(fd);
                 return nullptr;
@@ -135,10 +144,8 @@ void* handleClient(int fd) {
                     graph.clear();
                     statePts[fd] = n;
                     graphOwnerFd = fd;
-                    std::cout << "[Client " << fd << "] creating new graph with " << n << " points." << std::endl;
-                    sendStr(fd, "Insert " + std::to_string(n) + " points in x,y:\n");
+                    sendStr(fd, "Insert " + std::to_string(n) + " points in x,y:\n");      
                 } else {
-                    std::cout << "[Client " << fd << "] invalid Newgraph format." << std::endl;
                     sendStr(fd, "Usage: Newgraph n\n");
                 }
             } else if (cmd == "Newpoint") {
@@ -147,10 +154,8 @@ void* handleClient(int fd) {
                 Point p;
                 if (parsePoint(rest, p)) {
                     graph.push_back(p);
-                    std::cout << "[Client " << fd << "] added point: " << p.x << "," << p.y << std::endl;
                     sendStr(fd, "Point added.\n");
                 } else {
-                    std::cout << "[Client " << fd << "] invalid Newpoint format." << std::endl;
                     sendStr(fd, "Bad format.\n");
                 }
             } else if (cmd == "Removepoint") {
@@ -163,77 +168,98 @@ void* handleClient(int fd) {
                     });
                     if (it != graph.end()) {
                         graph.erase(it);
-                        std::cout << "[Client " << fd << "] removed point: " << p.x << "," << p.y << std::endl;
                         sendStr(fd, "Point removed.\n");
                     } else {
-                        std::cout << "[Client " << fd << "] point not found to remove: " << p.x << "," << p.y << std::endl;
                         sendStr(fd, "Point not found.\n");
                     }
                 } else {
-                    std::cout << "[Client " << fd << "] invalid Removepoint format." << std::endl;
                     sendStr(fd, "Bad format.\n");
                 }
             } else if (cmd == "CH") {
                 auto hull = computeConvexHull(graph);
                 double area = computeArea(hull);
+
+                // Producer–Consumer check
+                pthread_mutex_lock(&ch_mutex);
+                if (area >= 100) {
+                    wasAbove100 = true;
+                    std::cout << "At least 100 units belong to CH\n";
+                    pthread_cond_broadcast(&ch_cond);
+                } else if (wasAbove100 && area < 100) {
+                    std::cout << "At least 100 units no longer belong to CH\n";
+                    pthread_cond_broadcast(&ch_cond);
+                }
+                pthread_mutex_unlock(&ch_mutex);
+
                 std::ostringstream out;
                 out << std::fixed << std::setprecision(6)
                     << "Convex hull area: " << area << "\n";
                 sendStr(fd, out.str());
-                std::cout << "[Client " << fd << "] convex hull area calculated: " << area << std::endl;
-
-                pthread_mutex_lock(&areaMutex);
-                lastArea = area;
-                pthread_cond_signal(&areaCond);
-                pthread_mutex_unlock(&areaMutex);
             } else {
-                std::cout << "[Client " << fd << "] unknown command: " << cmd << std::endl;
                 sendStr(fd, "Unknown command.\n" + helpText());
             }
         }
     }
-    return nullptr;
-}
-
-void* areaWatcher(void*) {
-    while (true) {
-        pthread_mutex_lock(&areaMutex);
-        pthread_cond_wait(&areaCond, &areaMutex);
-        if (lastArea >= 100.0 && !alreadyAnnounced) {
-            std::cout << "At Least 100 units belongs to CH" << std::endl;
-            alreadyAnnounced = true;
-        } else if (lastArea < 100.0 && alreadyAnnounced) {
-            std::cout << "At Least 100 units no longer belongs to CH" << std::endl;
-            alreadyAnnounced = false;
-        }
-        pthread_mutex_unlock(&areaMutex);
-    }
-    return nullptr;
 }
 
 int main() {
     int lfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd < 0) {
+        perror("socket");
+        return 1;
+    }
+
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(9034);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     int opt = 1;
-    setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    bind(lfd, (sockaddr*)&addr, sizeof(addr));
-    listen(lfd, 10);
+    if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(lfd);
+        return 1;
+    }
 
-    char ipStr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(addr.sin_addr), ipStr, INET_ADDRSTRLEN);
-    std::cout << "Server started. Listening on IP " << ipStr
-              << " Port " << ntohs(addr.sin_port) << "..." << std::endl;
+    if (bind(lfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(lfd);
+        return 1;
+    }
+    if (listen(lfd, 10) < 0) {
+        perror("listen");
+        close(lfd);
+        return 1;
+    }
 
-
-    pthread_t areaTid;
-    pthread_create(&areaTid, nullptr, areaWatcher, nullptr);
-
+    std::cout << "Server (proactor) running on port 9034...\n";
     pthread_t tid = startProactor(lfd, handleClient);
-    pthread_join(tid, nullptr);
-    pthread_join(areaTid, nullptr);
+
+    std::string line;
+    while (true) {
+        if (!std::getline(std::cin, line)) {
+            std::cout << "EOF on stdin, shutting down server...\n";
+            break;
+        }
+        if (line == "EXIT" || line == "exit") {
+            std::cout << "Server EXIT command received, shutting down...\n";
+            break;
+        }
+    }
+
+    stopProactor(tid);
+    close(lfd);
+    {
+        std::lock_guard<std::mutex> lock(graphMutex);
+        for (auto &p : clientIds) {
+            int fd = p.first;
+            if (fd >= 0) {
+                close(fd);
+            }
+        }
+        clientIds.clear();
+    }
+
+    std::cout << "Server shutdown complete.\n";
     return 0;
 }

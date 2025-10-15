@@ -1,2 +1,0 @@
-Convex Hull with deque: 0.0556143 seconds
-Convex Hull with list: 0.0587035 seconds

@@ -1,3 +1,9 @@
+# make run
+# Newgraph <V>
+# enter points
+# CH / Newpoint / Removepoint
+# Ctrl+D to exit
+
 CXX = g++
 CXXFLAGS = -Wall -std=c++11
 TARGET = interactive_ch
@@ -8,7 +14,7 @@ all: $(TARGET)
 $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
 
-run:
+run: $(TARGET)
 	./$(TARGET)
 
 clean:
