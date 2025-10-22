@@ -88,6 +88,7 @@ run_random: $(RANDOM_TARGET)
 # make report_basic
 # (make open_report_basic)
 # make profile
+# (make open_profile)
 # make memcheck
 # make callgrind
 coverage_basic: CXXFLAGS += --coverage
