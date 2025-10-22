@@ -1,5 +1,5 @@
 # Q8 - make
-# Q9:
+# Q10:
 # make run
 # another WSL - make client
 # EXIT --> at the clients and the server

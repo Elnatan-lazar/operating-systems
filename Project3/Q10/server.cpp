@@ -21,10 +21,13 @@ std::mutex graphMutex;
 std::atomic<bool> serverRunning{true};
 int graphOwnerFd = -1;
 int nextClientId = 1;
+
 // Producer–Consumer variables
 pthread_mutex_t ch_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t ch_cond = PTHREAD_COND_INITIALIZER;
 bool wasAbove100 = false; 
+enum CHState { NONE, ABOVE_100, BELOW_100 };
+CHState chState = NONE;
 
 bool parsePoint(const std::string& s, Point& out) {
     std::string cleaned;
@@ -79,6 +82,23 @@ double computeArea(const std::vector<Point>& poly) {
         area += p1.x * p2.y - p2.x * p1.y;
     }
     return std::abs(area) / 2.0;
+}
+
+void* consumerThread(void*) {
+    while (serverRunning) {
+        pthread_mutex_lock(&ch_mutex);
+        pthread_cond_wait(&ch_cond, &ch_mutex); 
+
+        if (chState == ABOVE_100) {
+            std::cout << "At least 100 units belong to CH" << std::endl;
+        } else if (chState == BELOW_100) {
+            std::cout << "At least 100 units no longer belong to CH" << std::endl;
+        }
+
+        chState = NONE;
+        pthread_mutex_unlock(&ch_mutex);
+    }
+    return nullptr;
 }
 
 void* handleClient(int fd) {
@@ -181,13 +201,15 @@ void* handleClient(int fd) {
 
                 // Producer–Consumer check
                 pthread_mutex_lock(&ch_mutex);
-                if (area >= 100) {
+                if (area >= 100 && !wasAbove100) {
                     wasAbove100 = true;
-                    std::cout << "At least 100 units belong to CH\n";
-                    pthread_cond_broadcast(&ch_cond);
-                } else if (wasAbove100 && area < 100) {
-                    std::cout << "At least 100 units no longer belong to CH\n";
-                    pthread_cond_broadcast(&ch_cond);
+                    chState = ABOVE_100;
+                    pthread_cond_signal(&ch_cond);
+                } 
+                else if (wasAbove100 && area < 100) {
+                    wasAbove100 = false;
+                    chState = BELOW_100;
+                    pthread_cond_signal(&ch_cond);
                 }
                 pthread_mutex_unlock(&ch_mutex);
 
@@ -233,6 +255,9 @@ int main() {
     }
 
     std::cout << "Server (proactor) running on port 9034...\n";
+
+    pthread_t consumer_tid;
+    pthread_create(&consumer_tid, nullptr, consumerThread, nullptr);
     pthread_t tid = startProactor(lfd, handleClient);
 
     std::string line;
@@ -248,6 +273,8 @@ int main() {
     }
 
     stopProactor(tid);
+    serverRunning = false;
+    pthread_cond_broadcast(&ch_cond);
     close(lfd);
     {
         std::lock_guard<std::mutex> lock(graphMutex);
@@ -259,6 +286,7 @@ int main() {
         }
         clientIds.clear();
     }
+    pthread_join(consumer_tid, nullptr);
 
     std::cout << "Server shutdown complete.\n";
     return 0;

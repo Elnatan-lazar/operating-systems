@@ -202,6 +202,7 @@ int main() {
         int activity = select(max_fd + 1, &readfds, nullptr, nullptr, &tv);
         if (activity < 0) { perror("select"); break; }
 
+        // Command fron the server
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
             std::string line;
             if (!std::getline(std::cin, line)) { // Ctrl+D
@@ -214,6 +215,7 @@ int main() {
             }
         }
 
+        // New client connected
         if (FD_ISSET(server_fd, &readfds)) {
             sockaddr_in client_addr {};
             socklen_t client_len = sizeof(client_addr);
@@ -228,6 +230,7 @@ int main() {
             }
         }
 
+        // Connected clients - messages and commands
         for (auto &c : clients) {
             if (c.sock >= 0 && FD_ISSET(c.sock, &readfds)) {
                 char buffer[BUFFER_SIZE];
